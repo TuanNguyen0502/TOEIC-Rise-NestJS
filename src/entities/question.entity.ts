@@ -6,6 +6,7 @@ import {
   ManyToMany,
   JoinTable,
 } from 'typeorm';
+import { StringListTransformer } from 'src/common/utils/string-list.transformer';
 import { BaseEntity } from './base.entity';
 import { QuestionGroup } from './question-group.entity';
 import { Tag } from './tag.entity';
@@ -19,7 +20,11 @@ export class Question extends BaseEntity {
   content: string;
 
   // Storing List<String> as JSON. Requires 'json' type support in DB.
-  @Column({ type: 'json', nullable: true })
+  @Column({
+    type: 'json',
+    nullable: true,
+    transformer: new StringListTransformer(),
+  })
   options: string[];
 
   @Column({ name: 'correct_option', type: 'char', length: 1, nullable: false })
