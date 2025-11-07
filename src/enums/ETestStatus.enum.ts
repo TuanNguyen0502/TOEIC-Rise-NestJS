@@ -1,0 +1,6 @@
+export enum ETestStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  DELETED = 'DELETED',
+}
