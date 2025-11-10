@@ -13,6 +13,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyUserDto } from './dto/verify-user.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { Request, Response } from 'express';
 
@@ -39,6 +40,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async verifyUser(@Body() verifyDto: VerifyUserDto) {
     const message = await this.authService.verifyUser(verifyDto);
+    return { message };
+  }
+
+  @Post('resend')
+  @HttpCode(HttpStatus.OK)
+  async resendVerificationCode(@Body() resendOtpDto: ResendOtpDto) {
+    const message = await this.authService.resendVerificationCode(
+      resendOtpDto.email,
+    );
     return { message };
   }
 

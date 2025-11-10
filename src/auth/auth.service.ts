@@ -1,6 +1,5 @@
 import {
   Injectable,
-  UnauthorizedException,
   Inject,
   NotFoundException,
 } from '@nestjs/common';
@@ -48,8 +47,8 @@ export class AuthService {
 
     const payload = {
       email: account.email,
-      sub: user.id, // 'sub' (subject) thường dùng để lưu ID
-      roles: [user.role.name], // Gắn roles vào token
+      sub: user.id,
+      roles: [user.role.name],
     };
 
     return {
@@ -125,6 +124,8 @@ export class AuthService {
       verificationCodeExpiresAt: expiresAt,
       isActive: false,
       authProvider: EAuthProvider.LOCAL,
+      resendVerificationAttempts: 0,
+      resendVerificationLockedUntil: undefined,
     };
 
     const cacheKey = `${CACHE_REGISTRATION}::${registerDto.email}`;
@@ -196,13 +197,89 @@ export class AuthService {
     return 'Account verified successfully';
   }
 
+  async resendVerificationCode(email: string): Promise<string> {
+    const cacheKey = `${CACHE_REGISTRATION}::${email}`;
+    let isRegistering = false; // Flag to determine whether to save to cache or DB
+    let accountData: any; // Will hold data from DB or cache
+
+    // 1. Check DB first for existing account
+    const accountInDb = await this.userService.findOneByEmail(email);
+
+    if (accountInDb) {
+      if (accountInDb.isActive) {
+        throw new AppException(ErrorCode.VERIFIED_ACCOUNT);
+      }
+      accountData = accountInDb; // Use data from DB
+      isRegistering = false;
+    } else {
+      // 2. If not in DB, check cache
+      accountData = await this.cacheManager.get(cacheKey);
+      if (!accountData) {
+        // Not in DB and not in cache
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Account');
+      }
+      isRegistering = true; // Data is in cache
+    }
+
+    // 3. Check resend lock logic
+    if (
+      accountData.resendVerificationLockedUntil &&
+      new Date(accountData.resendVerificationLockedUntil) > new Date()
+    ) {
+      throw new AppException(ErrorCode.OTP_LIMIT_EXCEEDED, '5');
+    }
+
+    // 4. Increase the number of attempts
+    const attempts = (accountData.resendVerificationAttempts || 0) + 1;
+    accountData.resendVerificationAttempts = attempts;
+
+    // 5. Check lock condition
+    if (attempts >= 5) {
+      const lockTime = new Date();
+      lockTime.setMinutes(lockTime.getMinutes() + 30);
+      accountData.resendVerificationLockedUntil = lockTime;
+      accountData.resendVerificationAttempts = 0; // Reset counter
+
+      await this.saveTempAccount(isRegistering, email, accountData);
+      throw new AppException(ErrorCode.OTP_LIMIT_EXCEEDED, '5');
+    }
+
+    // 6. Generate new code and send email
+    const verificationCode = generateVerificationCode();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    accountData.verificationCode = verificationCode;
+    accountData.verificationCodeExpiresAt = expiresAt;
+
+    await this.sendVerificationEmail(email, verificationCode);
+
+    // 7. Save data (to cache or DB)
+    await this.saveTempAccount(isRegistering, email, accountData);
+
+    return 'Verification code sent';
+  }
+
+  private async saveTempAccount(
+    isRegistering: boolean,
+    email: string,
+    data: any,
+  ) {
+    if (isRegistering) {
+      // Data is a JSON object, save to cache
+      const cacheKey = `${CACHE_REGISTRATION}::${email}`;
+      await this.cacheManager.set(cacheKey, data, CACHE_REGISTRATION_TTL);
+    } else {
+      // Data is an Account entity, save to DB
+      await this.userService.saveAccount(data as Account);
+    }
+  }
+
   private async sendVerificationEmail(email: string, verificationCode: string) {
     const subject = 'Account Verification';
     try {
       await this.mailerService.sendMail({
         to: email,
         subject: subject,
-        template: 'emailTemplate',
+        template: 'emailTemplate', // Name of the .hbs file
         context: {
           subject: subject,
           verificationCode: verificationCode,
