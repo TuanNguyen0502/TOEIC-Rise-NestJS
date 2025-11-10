@@ -57,7 +57,7 @@ import { UserModule } from './user/user.module';
           from: `"TOEIC Rise" <${configService.get<string>('SUPPORT_EMAIL')}>`,
         },
         template: {
-          dir: join(__dirname, '..', 'templates'), // Trỏ đến thư mục templates
+          dir: join(__dirname, 'templates'), // Trỏ đến thư mục templates
           adapter: new HandlebarsAdapter(), // Sử dụng Handlebars
           options: {
             strict: true,
