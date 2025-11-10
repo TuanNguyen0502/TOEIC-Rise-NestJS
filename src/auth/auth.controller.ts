@@ -230,7 +230,7 @@ export class AuthController {
     }
   }
 
-  @Post('logout')
+  @Get('logout')
   @UseGuards(JwtAuthGuard)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     // Extract token from Authorization header
