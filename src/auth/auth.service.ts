@@ -21,6 +21,10 @@ import { VerifyUserDto } from './dto/verify-user.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { LoginResponse } from './dto/login-response.dto';
+import { CurrentUserResponse } from './dto/current-user-response.dto';
+import { RefreshTokenResponse } from './dto/refresh-token-response.dto';
+import * as crypto from 'crypto';
 
 const CACHE_REGISTRATION = 'cacheRegistration';
 const CACHE_FULLNAME_REGISTRATION = 'cacheRegistrationFullName';
@@ -28,6 +32,8 @@ const CACHE_REGISTRATION_TTL = 12 * 60 * 60 * 1000; // 12 hours
 
 @Injectable()
 export class AuthService {
+  private readonly refreshTokenDurationMs: number;
+
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
@@ -36,15 +42,42 @@ export class AuthService {
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    // Get refresh token duration from config (in milliseconds)
+    this.refreshTokenDurationMs =
+      parseInt(
+        this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_MS') ||
+          '2592000000',
+      ) || 2592000000; // Default: 30 days in milliseconds
+  }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto): Promise<LoginResponse> {
     const account = await this.validateUser(loginDto.email, loginDto.password);
     if (!account) {
       throw new AppException(ErrorCode.INVALID_CREDENTIALS);
     }
 
-    const user = (account as Account).user;
+    return this.getLoginResponse(account);
+  }
+
+  async loginWithGoogle(
+    email: string,
+    fullName: string,
+    avatar?: string,
+  ): Promise<LoginResponse> {
+    const account = await this.loginAndRegisterWithGoogle(
+      email,
+      fullName,
+      avatar,
+    );
+    return this.getLoginResponse(account);
+  }
+
+  private async getLoginResponse(account: Account): Promise<LoginResponse> {
+    const user = await this.userService.findUserByAccountId(account.id);
+    if (!user) {
+      throw new AppException(ErrorCode.INVALID_CREDENTIALS);
+    }
 
     const payload = {
       email: account.email,
@@ -52,9 +85,12 @@ export class AuthService {
       roles: [user.role.name],
     };
 
+    const accessToken = this.jwtService.sign(payload);
+    const expirationTime = this.getExpirationTime();
+
     return {
-      accessToken: this.jwtService.sign(payload),
-      expirationTime: process.env.JWT_EXPIRATION_TIME,
+      accessToken,
+      expirationTime,
       userId: user.id,
       email: account.email,
       fullName: user.fullName,
@@ -62,7 +98,28 @@ export class AuthService {
     };
   }
 
-  async validateUser(email: string, pass: string): Promise<any> {
+  private getExpirationTime(): number {
+    // Get expiration time from JWT config
+    const expiresIn = this.configService.get<string | number>(
+      'JWT_EXPIRATION_TIME',
+      '3600',
+    );
+
+    // Convert to milliseconds
+    if (typeof expiresIn === 'string') {
+      // Parse string like "3600" or "1h"
+      const seconds = parseInt(expiresIn);
+      if (!isNaN(seconds)) {
+        return seconds * 1000;
+      }
+    } else if (typeof expiresIn === 'number') {
+      return expiresIn * 1000;
+    }
+
+    return 3600 * 1000; // Default: 1 hour in milliseconds
+  }
+
+  async validateUser(email: string, pass: string): Promise<Account> {
     const account = await this.userService.findOneByEmail(email);
 
     if (!account || !account.password) {
@@ -86,9 +143,7 @@ export class AuthService {
         await this.userService.saveAccount(account);
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...result } = account;
-      return result;
+      return account;
     } else {
       account.failedLoginAttempts = (account.failedLoginAttempts || 0) + 1;
       if (account.failedLoginAttempts >= 5) {
@@ -152,7 +207,13 @@ export class AuthService {
     const cacheKey = `${CACHE_REGISTRATION}::${verifyDto.email}`;
     const fullNameCacheKey = `${CACHE_FULLNAME_REGISTRATION}::${verifyDto.email}`;
 
-    const tempAccountData: any = await this.cacheManager.get(cacheKey);
+    const tempAccountData = (await this.cacheManager.get(cacheKey)) as {
+      email: string;
+      password: string;
+      authProvider: EAuthProvider;
+      verificationCode: string;
+      verificationCodeExpiresAt: Date;
+    } | null;
     const fullName: string | undefined =
       await this.cacheManager.get(fullNameCacheKey);
 
@@ -160,7 +221,7 @@ export class AuthService {
       throw new AppException(ErrorCode.REGISTRATION_EXPIRED);
     }
 
-    if (new Date(tempAccountData.verificationCodeExpiresAt) < new Date()) {
+    if (tempAccountData.verificationCodeExpiresAt < new Date()) {
       throw new AppException(ErrorCode.OTP_EXPIRED);
     }
 
@@ -201,7 +262,13 @@ export class AuthService {
   async resendVerificationCode(email: string): Promise<string> {
     const cacheKey = `${CACHE_REGISTRATION}::${email}`;
     let isRegistering = false; // Flag to determine whether to save to cache or DB
-    let accountData: any; // Will hold data from DB or cache
+    let accountData: {
+      isActive: boolean;
+      resendVerificationAttempts: number;
+      resendVerificationLockedUntil: Date | string | null;
+      verificationCode?: string | null;
+      verificationCodeExpiresAt?: Date | string | null;
+    } | null = null; // Will hold data from DB or cache
 
     // 1. Check DB first for existing account
     const accountInDb = await this.userService.findOneByEmail(email);
@@ -210,11 +277,21 @@ export class AuthService {
       if (accountInDb.isActive) {
         throw new AppException(ErrorCode.VERIFIED_ACCOUNT);
       }
-      accountData = accountInDb; // Use data from DB
+      accountData = {
+        isActive: accountInDb.isActive,
+        resendVerificationAttempts: accountInDb.resendVerificationAttempts || 0,
+        resendVerificationLockedUntil:
+          accountInDb.resendVerificationLockedUntil || null,
+        verificationCode: accountInDb.verificationCode || null,
+        verificationCodeExpiresAt:
+          accountInDb.verificationCodeExpiresAt || null,
+      }; // Use data from DB
       isRegistering = false;
     } else {
       // 2. If not in DB, check cache
-      accountData = await this.cacheManager.get(cacheKey);
+      accountData = (await this.cacheManager.get(
+        cacheKey,
+      )) as typeof accountData;
       if (!accountData) {
         // Not in DB and not in cache
         throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Account');
@@ -368,13 +445,13 @@ export class AuthService {
       throw new AppException(ErrorCode.PASSWORD_MISMATCH);
     }
 
-    let payload: any;
+    let payload: { email: string; resetPwd?: boolean; [key: string]: any };
     try {
       // Verify token
       payload = await this.jwtService.verifyAsync(token, {
         secret: this.configService.get<string>('JWT_SECRET_KEY'),
       });
-    } catch (error) {
+    } catch {
       throw new AppException(ErrorCode.TOKEN_EXPIRED);
     }
 
@@ -396,13 +473,173 @@ export class AuthService {
   }
 
   private async _generatePasswordResetToken(account: Account): Promise<string> {
+    const user = await this.userService.findUserByAccountId(account.id);
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+    }
+
     const payload = {
       email: account.email,
-      sub: account.user.id,
+      sub: user.id,
       resetPwd: true, // Special claim
     };
     return this.jwtService.sign(payload, {
       expiresIn: '15m', // Token valid for 15 minutes
     });
+  }
+
+  async loginAndRegisterWithGoogle(
+    email: string,
+    fullName: string,
+    avatar?: string,
+  ): Promise<Account> {
+    // Check if user already exists
+    let account = await this.userService.findOneByEmail(email);
+
+    if (!account) {
+      // Create new account if user doesn't exist
+      const learnerRole = await this.roleRepository.findOne({
+        where: { name: ERole.LEARNER },
+      });
+      if (!learnerRole) {
+        throw new NotFoundException(
+          'LEARNER role not found. Please seed database.',
+        );
+      }
+
+      const accountData: Partial<Account> = {
+        email,
+        isActive: true,
+        authProvider: EAuthProvider.GOOGLE,
+        password: '{oauth2}', // Placeholder password for OAuth2 users
+      };
+
+      account = await this.userService.createAccountAndUser(
+        accountData,
+        fullName,
+        learnerRole,
+      );
+
+      // Update avatar if provided
+      if (avatar) {
+        const user = await this.userService.findUserByAccountId(account.id);
+        if (user) {
+          user.avatar = avatar;
+          await this.userService.saveUser(user);
+        }
+      }
+    } else {
+      // User exists, update avatar if provided and different
+      if (avatar) {
+        const user = await this.userService.findUserByAccountId(account.id);
+        if (user && user.avatar !== avatar) {
+          user.avatar = avatar;
+          await this.userService.saveUser(user);
+        }
+      }
+    }
+
+    return account;
+  }
+
+  async createRefreshToken(email: string): Promise<string> {
+    const account = await this.userService.findOneByEmail(email);
+    if (!account) {
+      throw new AppException(ErrorCode.INVALID_CREDENTIALS);
+    }
+
+    // Create new refresh token
+    const refreshToken = crypto.randomUUID();
+    account.refreshToken = refreshToken;
+    account.refreshTokenExpiryDate = new Date(
+      Date.now() + this.refreshTokenDurationMs,
+    );
+
+    await this.userService.saveAccount(account);
+    return refreshToken;
+  }
+
+  async getAccountByRefreshToken(
+    refreshToken: string,
+  ): Promise<Account | null> {
+    const account =
+      await this.userService.findAccountByRefreshToken(refreshToken);
+
+    if (
+      !account ||
+      !account.refreshTokenExpiryDate ||
+      account.refreshTokenExpiryDate < new Date()
+    ) {
+      return null;
+    }
+
+    return account;
+  }
+
+  async refreshToken(
+    refreshToken: string,
+    email: string,
+  ): Promise<RefreshTokenResponse> {
+    const account = await this.userService.findOneByEmail(email);
+    if (!account) {
+      throw new AppException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    if (
+      !account.refreshToken ||
+      account.refreshToken !== refreshToken ||
+      !account.refreshTokenExpiryDate ||
+      account.refreshTokenExpiryDate < new Date()
+    ) {
+      throw new AppException(ErrorCode.TOKEN_EXPIRED);
+    }
+
+    const user = await this.userService.findUserByAccountId(account.id);
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+    }
+
+    const payload = {
+      email: account.email,
+      sub: user.id,
+      roles: [user.role.name],
+    };
+
+    const accessToken = this.jwtService.sign(payload);
+    const expirationTime = this.getExpirationTime();
+
+    return {
+      accessToken,
+      accessTokenExpirationTime: expirationTime,
+    };
+  }
+
+  getRefreshTokenDurationMs(): number {
+    return this.refreshTokenDurationMs;
+  }
+
+  async getCurrentUser(email: string): Promise<CurrentUserResponse> {
+    const account = await this.userService.findOneByEmail(email);
+    if (!account) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Account');
+    }
+
+    const user = await this.userService.findUserByAccountId(account.id);
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+    }
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      avatar: user.avatar,
+      email: account.email,
+      role: user.role.name,
+      hasPassword:
+        account.password !== null &&
+        account.password !== undefined &&
+        account.password !== '{oauth2}' &&
+        account.password !== '',
+    };
   }
 }

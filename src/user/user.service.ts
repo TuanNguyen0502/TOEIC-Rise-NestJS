@@ -30,7 +30,7 @@ export class UserService {
     accountData: Partial<Account>,
     fullName: string,
     role: Role,
-  ): Promise<User> {
+  ): Promise<Account> {
     const newAccount = this.accountRepository.create(accountData);
     const newUser = this.userRepository.create({
       fullName,
@@ -45,6 +45,26 @@ export class UserService {
     await this.accountRepository.save(newAccount);
     newUser.account = newAccount;
     await this.userRepository.save(newUser);
-    return newUser;
+    return newAccount;
+  }
+
+  async findUserByAccountId(accountId: number): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { account: { id: accountId } },
+      relations: ['account', 'role'],
+    });
+  }
+
+  async saveUser(user: User): Promise<User> {
+    return this.userRepository.save(user);
+  }
+
+  async findAccountByRefreshToken(
+    refreshToken: string,
+  ): Promise<Account | null> {
+    return this.accountRepository.findOne({
+      where: { refreshToken },
+      relations: ['user', 'user.role'],
+    });
   }
 }
