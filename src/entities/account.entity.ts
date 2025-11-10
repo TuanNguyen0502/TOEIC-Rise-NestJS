@@ -75,4 +75,11 @@ export class Account extends BaseEntity {
 
   @OneToOne(() => User, (user) => user.account)
   user: User;
+
+  isAccountNonLocked(): boolean {
+    if (!this.accountLockedUntil) {
+      return true;
+    }
+    return new Date() >= new Date(this.accountLockedUntil);
+  }
 }

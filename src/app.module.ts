@@ -2,10 +2,15 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
+import { MailerModule } from '@nestjs-modules/mailer';
+import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { redisStore } from 'cache-manager-redis-store';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { join } from 'path';
+import { RoleModule } from './role/role.module';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -35,7 +40,34 @@ import { AuthModule } from './auth/auth.module';
       }),
       isGlobal: true,
     }),
+    MailerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        transport: {
+          host: configService.get<string>('SPRING_MAIL_HOST', 'smtp.gmail.com'),
+          port: configService.get<number>('SPRING_MAIL_PORT', 587),
+          secure: false, // true cho port 465, false cho các port khác
+          auth: {
+            user: configService.get<string>('SUPPORT_EMAIL'),
+            pass: configService.get<string>('APP_PASSWORD'),
+          },
+        },
+        defaults: {
+          from: `"TOEIC Rise" <${configService.get<string>('SUPPORT_EMAIL')}>`,
+        },
+        template: {
+          dir: join(__dirname, '..', 'templates'), // Trỏ đến thư mục templates
+          adapter: new HandlebarsAdapter(), // Sử dụng Handlebars
+          options: {
+            strict: true,
+          },
+        },
+      }),
+    }),
     AuthModule,
+    RoleModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],
