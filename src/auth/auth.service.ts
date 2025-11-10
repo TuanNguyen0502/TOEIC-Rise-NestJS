@@ -1,26 +1,26 @@
-import {
-  Injectable,
-  Inject,
-  NotFoundException,
-} from '@nestjs/common';
-import { UserService } from 'src/user/user.service';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
-import { VerifyUserDto } from './dto/verify-user.dto';
-import { Account } from 'src/entities/account.entity';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { MailerService } from '@nestjs-modules/mailer';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+import type { Cache } from 'cache-manager';
+import { UserService } from 'src/user/user.service';
+import { Account } from 'src/entities/account.entity';
+import { Role } from 'src/entities/role.entity';
 import { generateVerificationCode } from 'src/common/utils/code-generator.util';
 import { EAuthProvider } from 'src/enums/EAuthProvider.enum';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Role } from 'src/entities/role.entity';
-import { Repository } from 'typeorm';
 import { ERole } from 'src/enums/ERole.enum';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
 import { AppException } from 'src/exceptions/app.exception';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { VerifyUserDto } from './dto/verify-user.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 const CACHE_REGISTRATION = 'cacheRegistration';
 const CACHE_FULLNAME_REGISTRATION = 'cacheRegistrationFullName';
@@ -35,6 +35,7 @@ export class AuthService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
+    private readonly configService: ConfigService,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -289,5 +290,119 @@ export class AuthService {
       console.error('Failed to send email:', error);
       throw new AppException(ErrorCode.MAIL_SEND_FAILED);
     }
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<string> {
+    const { email } = forgotPasswordDto;
+    const account = await this.userService.findOneByEmail(email);
+
+    if (!account) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Account');
+    }
+
+    // Logic rate-limiting
+    if (
+      account.resendVerificationLockedUntil &&
+      new Date(account.resendVerificationLockedUntil) > new Date()
+    ) {
+      throw new AppException(ErrorCode.OTP_LIMIT_EXCEEDED, '5');
+    }
+
+    const attempts = (account.resendVerificationAttempts || 0) + 1;
+    account.resendVerificationAttempts = attempts;
+
+    if (attempts >= 5) {
+      const lockTime = new Date();
+      lockTime.setMinutes(lockTime.getMinutes() + 30);
+      account.resendVerificationLockedUntil = lockTime;
+      account.resendVerificationAttempts = 0;
+      await this.userService.saveAccount(account);
+      throw new AppException(ErrorCode.OTP_LIMIT_EXCEEDED, '5');
+    }
+
+    // Generate OTP and send email
+    const verificationCode = generateVerificationCode();
+    account.verificationCode = verificationCode;
+    account.verificationCodeExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    await this.userService.saveAccount(account);
+    await this.sendVerificationEmail(email, verificationCode);
+
+    return 'Verification code sent';
+  }
+
+  async verifyOtp(verifyDto: VerifyOtpDto): Promise<{ resetToken: string }> {
+    const { email, otp } = verifyDto;
+    const account = await this.userService.findOneByEmail(email);
+
+    if (!account) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Account');
+    }
+
+    if (!account.verificationCode || account.verificationCode !== otp) {
+      throw new AppException(ErrorCode.INVALID_OTP, "User's");
+    }
+
+    if (
+      !account.verificationCodeExpiresAt ||
+      new Date(account.verificationCodeExpiresAt) < new Date()
+    ) {
+      throw new AppException(ErrorCode.OTP_EXPIRED);
+    }
+
+    // Clear OTP after verification
+    account.verificationCode = undefined;
+    account.verificationCodeExpiresAt = undefined;
+    await this.userService.saveAccount(account);
+
+    // Generate special token for password reset
+    const resetToken = await this._generatePasswordResetToken(account);
+    return { resetToken };
+  }
+
+  async resetPassword(
+    resetDto: ResetPasswordDto,
+    token: string,
+  ): Promise<string> {
+    if (resetDto.password !== resetDto.confirmPassword) {
+      throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+    }
+
+    let payload: any;
+    try {
+      // Verify token
+      payload = await this.jwtService.verifyAsync(token, {
+        secret: this.configService.get<string>('JWT_SECRET_KEY'),
+      });
+    } catch (error) {
+      throw new AppException(ErrorCode.TOKEN_EXPIRED);
+    }
+
+    // Check if this is a password reset token
+    if (!payload.resetPwd) {
+      throw new AppException(ErrorCode.TOKEN_INVALID);
+    }
+
+    const account = await this.userService.findOneByEmail(payload.email);
+    if (!account) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Account');
+    }
+
+    // Update new password
+    account.password = await bcrypt.hash(resetDto.password, 10);
+    await this.userService.saveAccount(account);
+
+    return 'Password reset successfully';
+  }
+
+  private async _generatePasswordResetToken(account: Account): Promise<string> {
+    const payload = {
+      email: account.email,
+      sub: account.user.id,
+      resetPwd: true, // Special claim
+    };
+    return this.jwtService.sign(payload, {
+      expiresIn: '15m', // Token valid for 15 minutes
+    });
   }
 }

@@ -8,14 +8,20 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  Headers,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AppException } from 'src/exceptions/app.exception';
+import { ErrorCode } from 'src/enums/ErrorCode.enum';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyUserDto } from './dto/verify-user.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import type { Request, Response } from 'express';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -52,11 +58,36 @@ export class AuthController {
     return { message };
   }
 
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    const message = await this.authService.forgotPassword(forgotPasswordDto);
+    return { message };
+  }
+
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  async verifyOtp(@Body() verifyDto: VerifyOtpDto) {
+    return this.authService.verifyOtp(verifyDto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Body() resetDto: ResetPasswordDto,
+    @Headers('authorization') authorization: string,
+  ) {
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      throw new AppException(ErrorCode.TOKEN_INVALID);
+    }
+    const token = authorization.substring(7);
+    const message = await this.authService.resetPassword(resetDto, token);
+    return { message };
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getProfile(@Req() req: Request) {
     return req.user;
   }
-
-  // ... (Các route khác)
 }
