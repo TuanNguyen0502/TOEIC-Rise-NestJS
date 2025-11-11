@@ -7,6 +7,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { BlacklistService } from './blacklist/blacklist.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserModule } from 'src/user/user.module';
 import { RoleModule } from 'src/role/role.module';
 
@@ -31,8 +32,14 @@ import { RoleModule } from 'src/role/role.module';
       },
     }),
   ],
-  providers: [AuthService, JwtStrategy, GoogleStrategy, BlacklistService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    BlacklistService,
+    JwtAuthGuard,
+  ],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, JwtAuthGuard, BlacklistService],
 })
 export class AuthModule {}

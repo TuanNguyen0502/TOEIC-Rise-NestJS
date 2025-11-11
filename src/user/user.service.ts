@@ -5,6 +5,9 @@ import { Account } from 'src/entities/account.entity';
 import { User } from 'src/entities/user.entity';
 import { Role } from 'src/entities/role.entity';
 import { EGender } from 'src/enums/EGender.enum';
+import { ProfileResponseDto } from './dto/profile-response.dto';
+import { AppException } from 'src/exceptions/app.exception';
+import { ErrorCode } from 'src/enums/ErrorCode.enum';
 
 @Injectable()
 export class UserService {
@@ -66,5 +69,24 @@ export class UserService {
       where: { refreshToken },
       relations: ['user', 'user.role'],
     });
+  }
+
+  async getUserProfileByEmail(email: string): Promise<ProfileResponseDto> {
+    const account = await this.findOneByEmail(email);
+    if (!account) {
+      throw new AppException(ErrorCode.UNAUTHORIZED);
+    }
+
+    const user = await this.findUserByAccountId(account.id);
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+    }
+
+    return {
+      email: account.email,
+      fullName: user.fullName,
+      gender: user.gender,
+      avatar: user.avatar,
+    };
   }
 }
