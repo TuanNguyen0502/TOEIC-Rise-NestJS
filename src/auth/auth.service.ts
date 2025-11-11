@@ -24,6 +24,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { LoginResponse } from './dto/login-response.dto';
 import { CurrentUserResponse } from './dto/current-user-response.dto';
 import { RefreshTokenResponse } from './dto/refresh-token-response.dto';
+import { ChangePasswordDto } from 'src/user/dto/change-password.dto';
 import * as crypto from 'crypto';
 
 const CACHE_REGISTRATION = 'cacheRegistration';
@@ -47,7 +48,7 @@ export class AuthService {
     this.refreshTokenDurationMs =
       parseInt(
         this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_MS') ||
-          '2592000000',
+        '2592000000',
       ) || 2592000000; // Default: 30 days in milliseconds
   }
 
@@ -445,7 +446,7 @@ export class AuthService {
       throw new AppException(ErrorCode.PASSWORD_MISMATCH);
     }
 
-    let payload: { email: string; resetPwd?: boolean; [key: string]: any };
+    let payload: { email: string; resetPwd?: boolean;[key: string]: any };
     try {
       // Verify token
       payload = await this.jwtService.verifyAsync(token, {
@@ -641,5 +642,33 @@ export class AuthService {
         account.password !== '{oauth2}' &&
         account.password !== '',
     };
+  }
+
+  async changePassword(dto: ChangePasswordDto, email: string): Promise<string> {
+    const account = await this.userService.findOneByEmail(email);
+    if (!account) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Account');
+    }
+
+    if (!account.password || account.password === '{oauth2}') {
+      throw new AppException(
+        ErrorCode.INVALID_CREDENTIALS,
+        'Account has no password',
+      );
+    }
+
+    const isMatch = await bcrypt.compare(dto.oldPassword, account.password);
+    if (!isMatch) {
+      throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+    }
+
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+    }
+
+    account.password = await bcrypt.hash(dto.newPassword, 10);
+    await this.userService.saveAccount(account);
+
+    return 'Password updated successfully';
   }
 }
