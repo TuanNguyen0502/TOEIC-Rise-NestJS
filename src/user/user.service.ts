@@ -8,6 +8,9 @@ import { EGender } from 'src/enums/EGender.enum';
 import { ProfileResponseDto } from './dto/profile-response.dto';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
+import { ProfileUpdateDto } from './dto/profile-update.dto';
+import { PROFILE_AVATAR_MAX_SIZE } from 'src/common/constants/constants';
+import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 
 @Injectable()
 export class UserService {
@@ -16,6 +19,7 @@ export class UserService {
     private readonly accountRepository: Repository<Account>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly cloudinary: CloudinaryService,
   ) {}
 
   async findOneByEmail(email: string): Promise<Account | null> {
@@ -88,5 +92,30 @@ export class UserService {
       gender: user.gender,
       avatar: user.avatar,
     };
+  }
+
+  async updateUserProfile(
+    email: string,
+    dto: ProfileUpdateDto,
+    avatar?: Express.Multer.File,
+  ): Promise<void> {
+    const account = await this.findOneByEmail(email);
+    if (!account) throw new AppException(ErrorCode.UNAUTHORIZED);
+
+    const user = await this.findUserByAccountId(account.id);
+    if (!user) throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+
+    if (avatar) {
+      if (avatar.size > PROFILE_AVATAR_MAX_SIZE) {
+        throw new AppException(ErrorCode.IMAGE_SIZE_EXCEEDED);
+      }
+      this.cloudinary.validateImageName(avatar.originalname);
+      const url = await this.cloudinary.uploadBuffer(avatar.buffer);
+      user.avatar = url;
+    }
+
+    user.fullName = dto.fullName;
+    user.gender = dto.gender;
+    await this.userRepository.save(user);
   }
 }

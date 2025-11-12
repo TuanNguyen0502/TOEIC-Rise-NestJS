@@ -6,11 +6,19 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { forwardRef } from '@nestjs/common';
 import { AuthModule } from 'src/auth/auth.module';
+import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
+import * as multer from 'multer';
+import { MulterModule } from '@nestjs/platform-express';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Account]),
     forwardRef(() => AuthModule),
+    CloudinaryModule,
+    MulterModule.register({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
   ],
   providers: [UserService],
   controllers: [UserController],
