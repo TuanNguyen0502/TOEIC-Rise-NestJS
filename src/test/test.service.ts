@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like } from 'typeorm';
+import { Repository, FindManyOptions, Like, Not } from 'typeorm';
 import { Test } from '../entities/test.entity';
 import { TestSet } from '../entities/test-set.entity';
 import { Part } from '../entities/part.entity';
@@ -10,12 +10,15 @@ import { Tag } from '../entities/tag.entity';
 import { PageRequestDto } from './dto/page-request.dto';
 import { ETestSetStatus } from '../enums/ETestSetStatus.enum';
 import { ETestStatus } from '../enums/ETestStatus.enum';
+import { GetTestsAdminDto } from './dto/get-tests-admin.dto';
 
 @Injectable()
 export class TestService {
   constructor(
     @InjectRepository(Test)
     private testRepository: Repository<Test>,
+    @InjectRepository(QuestionGroup)
+    private qgRepository: Repository<QuestionGroup>,
   ) {}
 
   /**
@@ -115,5 +118,138 @@ export class TestService {
     };
 
     return response;
+  }
+
+  /**
+   * Corresponds to: testService.getAllTests(...)
+   *
+   * This implements the admin logic from TestServiceImpl.java:
+   * - Filters by name (if provided)
+   * - Filters by status (if provided)
+   * - If status is NOT provided, it filters out DELETED.
+   * - Paginates and sorts
+   */
+  async getAllTests(dto: GetTestsAdminDto) {
+    const { page, size, sortBy, direction, name, status } = dto;
+
+    const where: FindManyOptions<Test>['where'] = {};
+
+    if (name) {
+      where.name = Like(`%${name}%`);
+    }
+
+    if (status) {
+      where.status = status;
+    } else {
+      // Default to not showing DELETED tests
+      where.status = Not(ETestStatus.DELETED);
+    }
+
+    const [result, total] = await this.testRepository.findAndCount({
+      where,
+      order: { [sortBy]: direction },
+      take: size,
+      skip: page * size,
+    });
+
+    // Map to TestResponse DTO (as defined in Java)
+    const testResponses = result.map((test) => ({
+      id: test.id,
+      name: test.name,
+      status: test.status,
+      createdAt: test.createdAt,
+      updatedAt: test.updatedAt,
+    }));
+
+    return {
+      meta: {
+        page,
+        pageSize: size,
+        pages: Math.ceil(total / size),
+        total,
+      },
+      result: testResponses,
+    };
+  }
+
+  /**
+   * Corresponds to: testService.getTestDetailById(id)
+   *
+   * This replicates the logic from TestServiceImpl.java and
+   * QuestionGroupServiceImpl.java to build the detailed DTO.
+   */
+  async getAdminTestDetailById(id: number) {
+    const test = await this.testRepository.findOne({
+      where: { id },
+    });
+
+    if (!test) {
+      throw new NotFoundException(`Test with ID ${id} not found`);
+    }
+
+    // Fetch all related data in a more efficient way than the Java N+1 loop
+    const questionGroups = await this.qgRepository.find({
+      where: { test: { id: id } },
+      relations: ['part', 'questions', 'questions.tags'],
+      order: {
+        part: { id: 'ASC' }, // Order by part
+        position: 'ASC', // Then by group position
+        questions: { position: 'ASC' }, // Then by question position
+      },
+    });
+
+    // Manually group by Part
+    const groupedByPart = new Map<Part, QuestionGroup[]>();
+
+    for (const qg of questionGroups) {
+      if (!qg.part) continue;
+
+      // If the part is not in the map yet, initialize it with an empty array
+      if (!groupedByPart.has(qg.part)) {
+        groupedByPart.set(qg.part, []);
+      }
+      groupedByPart.get(qg.part)!.push(qg); // The '!' non-null assertion is safe here
+    }
+
+    // Build the PartResponse DTOs
+    const partResponses = Array.from(groupedByPart.entries()).map(
+      ([part, groups]) => {
+        // Build the QuestionGroupResponse DTOs
+        const questionGroupResponses = groups.map((qg) => ({
+          id: qg.id,
+          audioUrl: qg.audioUrl,
+          imageUrl: qg.imageUrl,
+          passage: qg.passage,
+          transcript: qg.transcript,
+          position: qg.position,
+          // Build the QuestionResponse DTOs
+          questions: qg.questions.map((q) => ({
+            id: q.id,
+            position: q.position,
+            content: q.content,
+            options: q.options,
+            correctOption: q.correctOption,
+            explanation: q.explanation,
+            tags: q.tags.map((t) => t.name),
+          })),
+        }));
+
+        return {
+          id: part.id,
+          name: part.name,
+          questionGroups: questionGroupResponses,
+        };
+      },
+    );
+
+    // Build the final TestDetailResponse DTO
+    return {
+      id: test.id,
+      name: test.name,
+      status: test.status,
+      createdAt: test.createdAt,
+      updatedAt: test.updatedAt,
+      partResponses: partResponses,
+    };
   }
 }
