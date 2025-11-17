@@ -12,6 +12,7 @@ import { join } from 'path';
 import { RoleModule } from './role/role.module';
 import { UserModule } from './user/user.module';
 import { TestModule } from './test/test.module';
+import { QuestionModule } from './question/question.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { TestModule } from './test/test.module';
     RoleModule,
     UserModule,
     TestModule,
+    QuestionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
