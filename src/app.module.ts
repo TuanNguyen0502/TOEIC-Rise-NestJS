@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { join } from 'path';
 import { RoleModule } from './role/role.module';
 import { UserModule } from './user/user.module';
+import { TestModule } from './test/test.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { UserModule } from './user/user.module';
     AuthModule,
     RoleModule,
     UserModule,
+    TestModule,
   ],
   controllers: [AppController],
   providers: [AppService],
