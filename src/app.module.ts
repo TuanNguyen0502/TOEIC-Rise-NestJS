@@ -13,6 +13,7 @@ import { RoleModule } from './role/role.module';
 import { UserModule } from './user/user.module';
 import { TestModule } from './test/test.module';
 import { QuestionModule } from './question/question.module';
+import { TestSetModule } from './test-set/test-set.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { QuestionModule } from './question/question.module';
     UserModule,
     TestModule,
     QuestionModule,
+    TestSetModule,
   ],
   controllers: [AppController],
   providers: [AppService],

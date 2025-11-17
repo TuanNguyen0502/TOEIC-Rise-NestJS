@@ -48,7 +48,7 @@ export class AuthService {
     this.refreshTokenDurationMs =
       parseInt(
         this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_MS') ||
-        '2592000000',
+          '2592000000',
       ) || 2592000000; // Default: 30 days in milliseconds
   }
 
@@ -446,7 +446,7 @@ export class AuthService {
       throw new AppException(ErrorCode.PASSWORD_MISMATCH);
     }
 
-    let payload: { email: string; resetPwd?: boolean;[key: string]: any };
+    let payload: { email: string; resetPwd?: boolean; [key: string]: any };
     try {
       // Verify token
       payload = await this.jwtService.verifyAsync(token, {
