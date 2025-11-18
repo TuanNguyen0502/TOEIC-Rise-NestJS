@@ -10,6 +10,7 @@ import { BlacklistService } from './blacklist/blacklist.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserModule } from 'src/user/user.module';
 import { RoleModule } from 'src/role/role.module';
+import { RolesGuard } from './guards/roles.guard';
 
 @Module({
   imports: [
@@ -38,8 +39,9 @@ import { RoleModule } from 'src/role/role.module';
     GoogleStrategy,
     BlacklistService,
     JwtAuthGuard,
+    RolesGuard,
   ],
   controllers: [AuthController],
-  exports: [AuthService, JwtAuthGuard, BlacklistService],
+  exports: [AuthService, JwtAuthGuard, BlacklistService, RolesGuard],
 })
 export class AuthModule {}

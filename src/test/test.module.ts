@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TestController } from './test.controller';
 import { TestService } from './test.service';
@@ -35,8 +35,10 @@ import { TestExcelMapper } from './mapper/test.mapper';
     QuestionGroupModule,
     QuestionModule,
     PartModule,
+    forwardRef(() => TestSetModule),
   ],
   controllers: [TestController, AdminTestController],
   providers: [TestService, RolesGuard, TestExcelMapper],
+  exports: [TestService],
 })
 export class TestModule {}

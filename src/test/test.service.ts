@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, Not, DataSource } from 'typeorm';
+import { Repository, FindManyOptions, Like, Not } from 'typeorm';
 import { Test } from '../entities/test.entity';
 import { Part } from '../entities/part.entity';
 import { QuestionGroup } from '../entities/question-group.entity';
@@ -40,12 +40,12 @@ export class TestService {
   constructor(
     @InjectRepository(Test)
     private readonly testRepository: Repository<Test>,
+    @Inject(forwardRef(() => TestSetService))
     private readonly testSetService: TestSetService,
     private readonly tagService: TagService,
     private readonly partService: PartService,
     private readonly questionGroupService: QuestionGroupService,
     private readonly questionService: QuestionService,
-    private dataSource: DataSource,
     private readonly testExcelMapper: TestExcelMapper,
   ) {}
 
@@ -411,5 +411,21 @@ export class TestService {
       if (e instanceof AppException) throw e;
       throw new AppException(ErrorCode.FILE_READ_ERROR);
     }
+  }
+
+  async deleteTestsByTestSetId(testSetId: number): Promise<void> {
+    const tests = await this.testRepository.find({
+      where: {
+        testSet: { id: testSetId },
+      },
+    });
+
+    if (!tests.length) return;
+
+    for (const test of tests) {
+      test.status = ETestStatus.DELETED;
+    }
+
+    await this.testRepository.save(tests);
   }
 }
