@@ -1,6 +1,10 @@
 import {
   Controller,
   Get,
+  Post,
+  UploadedFile,
+  Body,
+  UseInterceptors,
   Param,
   ParseIntPipe,
   Query,
@@ -13,6 +17,8 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { TestRequestDto } from './dto/test-request.dto';
 
 @ApiTags('admin/tests')
 @ApiBearerAuth('JWT') // For Swagger UI
@@ -30,5 +36,15 @@ export class AdminTestController {
   @Get(':id')
   async getTestById(@Param('id', ParseIntPipe) id: number) {
     return this.testService.getAdminTestDetailById(id);
+  }
+
+  @Post('import')
+  @UseInterceptors(FileInterceptor('file'))
+  async importTests(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() testRequest: TestRequestDto,
+  ) {
+    await this.testService.importTest(file, testRequest);
+    return { message: 'Test imported' };
   }
 }

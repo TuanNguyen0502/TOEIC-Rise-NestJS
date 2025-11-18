@@ -3,6 +3,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Cache } from 'cache-manager';
 import { JwtService } from '@nestjs/jwt';
 
+export interface JwtPayload {
+  sub: number;
+  email?: string;
+  role?: string;
+  exp: number;
+  iat?: number;
+}
+
 @Injectable()
 export class BlacklistService {
   constructor(
@@ -12,10 +20,9 @@ export class BlacklistService {
 
   async blacklistToken(token: string) {
     try {
-      const decoded = this.jwtService.decode(token) as any;
-      const exp = decoded.exp;
+      const payload = this.jwtService.verify<JwtPayload>(token);
       const now = Math.floor(Date.now() / 1000);
-      const ttl = exp - now; // Thời gian sống còn lại của token
+      const ttl = payload.exp - now; // Thời gian sống còn lại của token
 
       if (ttl > 0) {
         await this.cacheManager.set(`blacklist:${token}`, 'true', ttl);

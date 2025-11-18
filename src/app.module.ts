@@ -36,7 +36,7 @@ import { UserTestModule } from './user-test/user-test.module';
     CacheModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (config: ConfigService) => ({
+      useFactory: (config: ConfigService) => ({
         store: redisStore,
         host: config.get('REDIS_HOST'),
         port: config.get('REDIS_PORT'),

@@ -8,6 +8,7 @@ export const MessageConstant = {
   INVALID_OTP: 'Invalid OTP! OTP must be exactly 6 digits (0-9).',
   INVALID_TEST_SET:
     'Test set name can only contain letters, digits, spaces, and parentheses.',
+  INVALID_TEST_SET_ID: 'Test set id must be greater than 0',
 
   // Profile messages
   PROFILE_FULLNAME_NOT_NULL: 'Full name must not be null.',
@@ -85,4 +86,7 @@ export const MessageConstant = {
   TEST_ID_NOT_NULL: 'Test ID must not be null.',
   TIME_SPENT_MIN: 'Time spent must be at least 1 second.',
   ANSWERS_NOT_EMPTY: 'Answers must not be empty.',
+
+  // Cloudinary
+  CLOUDINARY_ERROR: 'Cloudinary upload error',
 } as const;

@@ -5,14 +5,15 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
+import { MessageConstant } from 'src/common/constants/messages.constant';
 
 export class QuestionRequestDto {
   @IsInt()
-  @IsNotEmpty({ message: 'Question must not be null.' })
+  @IsNotEmpty({ message: MessageConstant.QUESTION_ID_NOT_NULL })
   id: number;
 
   @IsInt()
-  @IsNotEmpty({ message: 'Question group must not be null.' })
+  @IsNotEmpty({ message: MessageConstant.QUESTION_GROUP_ID_NOT_NULL })
   questionGroupId: number;
 
   @IsOptional()
@@ -24,14 +25,14 @@ export class QuestionRequestDto {
   options?: Record<string, string>;
 
   @IsString()
-  @IsNotEmpty({ message: 'Correct option must not be blank.' })
+  @IsNotEmpty({ message: MessageConstant.CORRECT_OPTION_NOT_BLANK })
   correctOption: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Explain must not be blank.' })
+  @IsNotEmpty({ message: MessageConstant.EXPLAIN_NOT_BLANK })
   explanation: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Tag must not be empty.' })
+  @IsNotEmpty({ message: MessageConstant.TAG_NOT_EMPTY })
   tags: string; // Will be a semicolon-separated string, e.g., "tag1;tag2"
 }

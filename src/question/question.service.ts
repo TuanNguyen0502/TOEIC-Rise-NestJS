@@ -1,55 +1,27 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Question } from '../entities/question.entity';
 import { QuestionGroup } from '../entities/question-group.entity';
 import { Tag } from '../entities/tag.entity';
 import { QuestionRequestDto } from './dto/question-request.dto';
 import { QuestionResponseDto } from './dto/question-response.dto';
+import { QuestionExcelRequestDto } from 'src/test/dto/question-excel-request.dto';
+import { QuestionMapper } from './mapper/question.mapper';
+import { QuestionGroupService } from 'src/question-group/question-group.service';
+import { TagService } from 'src/tag/tag.service';
+import { AppException } from 'src/exceptions/app.exception';
+import { ErrorCode } from 'src/enums/ErrorCode.enum';
 
 @Injectable()
 export class QuestionService {
   constructor(
     @InjectRepository(Question)
     private questionRepository: Repository<Question>,
-    @InjectRepository(QuestionGroup)
-    private qgRepository: Repository<QuestionGroup>,
-    @InjectRepository(Tag)
-    private tagRepository: Repository<Tag>,
+    private readonly questionGroupService: QuestionGroupService,
+    private readonly tagService: TagService,
+    private readonly questionMapper: QuestionMapper,
   ) {}
-
-  /**
-   * Helper function to find or create tags from a string (e.g., "tag1;tag2")
-   * This replicates the logic from TagServiceImpl.java
-   */
-  private async findOrCreateTags(tagsString: string): Promise<Tag[]> {
-    if (!tagsString) {
-      return [];
-    }
-
-    const tagNames = tagsString
-      .split(';')
-      .map((t) => t.trim())
-      .filter(Boolean);
-    if (tagNames.length === 0) {
-      return [];
-    }
-
-    const existingTags = await this.tagRepository.find({
-      where: { name: In(tagNames) },
-    });
-
-    const existingTagNames = existingTags.map((t) => t.name);
-    const newTagNames = tagNames.filter((n) => !existingTagNames.includes(n));
-
-    const newTags = newTagNames.map((name) =>
-      this.tagRepository.create({ name }),
-    );
-    const savedTags = await this.tagRepository.save(newTags);
-
-    return [...existingTags, ...savedTags];
-  }
-
   /**
    * Corresponds to: questionService.getQuestionById(id)
    */
@@ -60,7 +32,7 @@ export class QuestionService {
     });
 
     if (!question) {
-      throw new NotFoundException(`Question with ID ${id} not found`);
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question id');
     }
 
     // Map to the DTO
@@ -84,21 +56,19 @@ export class QuestionService {
       where: { id: dto.id },
     });
     if (!question) {
-      throw new NotFoundException(`Question with ID ${dto.id} not found`);
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
     }
 
     // 2. Find the question group (to ensure it exists)
-    const questionGroup = await this.qgRepository.findOne({
-      where: { id: dto.questionGroupId },
-    });
+    const questionGroup = await this.questionGroupService.getQuestionGroup(
+      dto.questionGroupId,
+    );
     if (!questionGroup) {
-      throw new NotFoundException(
-        `QuestionGroup with ID ${dto.questionGroupId} not found`,
-      );
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'QuestionGroup');
     }
 
     // 3. Find or create tags
-    const tags = await this.findOrCreateTags(dto.tags);
+    const tags = await this.tagService.getTagsFromString(dto.tags);
 
     // 4. Update the question entity
     question.questionGroup = questionGroup;
@@ -119,5 +89,22 @@ export class QuestionService {
 
     // 5. Save the question
     await this.questionRepository.save(question);
+  }
+
+  async createQuestion(
+    request: QuestionExcelRequestDto,
+    questionGroup: QuestionGroup,
+    tags: Tag[],
+  ): Promise<Question> {
+    // Map từ DTO + QuestionGroup sang entity Question
+    const question = this.questionMapper.toEntity(request, questionGroup);
+
+    // Gán tags nếu có
+    if (tags && tags.length > 0) {
+      question.tags = [...tags];
+    }
+
+    // TypeORM sẽ tự insert/update + bảng join ManyToMany
+    return await this.questionRepository.save(question);
   }
 }

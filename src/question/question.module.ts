@@ -8,13 +8,23 @@ import { Tag } from '../entities/tag.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { QuestionController } from './question.controller';
+import { QuestionGroupModule } from 'src/question-group/question-group.module';
+import { TestSetModule } from 'src/test-set/test-set.module';
+import { TestSet } from 'src/entities/test-set.entity';
+import { TagModule } from 'src/tag/tag.module';
+import { QuestionMapper } from './mapper/question.mapper';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Question, QuestionGroup, Tag]),
+    TypeOrmModule.forFeature([Question, QuestionGroup, Tag, TestSet]),
     AuthModule, // Import AuthModule to use JwtAuthGuard
+    QuestionGroupModule,
+    TestSetModule,
+    TagModule,
+    QuestionModule,
   ],
   controllers: [AdminQuestionController, QuestionController],
-  providers: [QuestionService, RolesGuard], // Provide RolesGuard
+  providers: [QuestionService, RolesGuard, QuestionMapper], // Provide RolesGuard
+  exports: [QuestionService],
 })
 export class QuestionModule {}

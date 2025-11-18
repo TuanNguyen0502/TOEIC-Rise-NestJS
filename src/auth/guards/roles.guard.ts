@@ -2,6 +2,7 @@ import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
+import { RequestWithUser } from 'src/common/bases/request-user.dto';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -12,14 +13,18 @@ export class RolesGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!requiredRoles) {
+    if (!requiredRoles || requiredRoles.length === 0) {
       return true; // Không có decorator @Roles, cho phép truy cập
     }
 
     // Lấy user object từ request (đã được JwtStrategy gán vào)
-    const { user } = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<RequestWithUser>();
+    const user = request.user;
 
+    if (!user || !Array.isArray(user.roles)) {
+      return false;
+    }
     // Kiểm tra xem user.roles có chứa bất kỳ role nào được yêu cầu không
-    return requiredRoles.some((role) => user.roles?.includes(role));
+    return requiredRoles.some((role) => user.roles.includes(role));
   }
 }

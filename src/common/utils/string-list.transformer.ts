@@ -22,7 +22,7 @@ export class StringListTransformer implements ValueTransformer {
     }
     try {
       return JSON.stringify(value);
-    } catch (e) {
+    } catch {
       return '[]';
     }
   }
@@ -35,8 +35,15 @@ export class StringListTransformer implements ValueTransformer {
       return [];
     }
     try {
-      return JSON.parse(value);
-    } catch (e) {
+      const parsed: unknown = JSON.parse(value);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((item) => typeof item === 'string')
+      ) {
+        return parsed;
+      }
+      return [];
+    } catch {
       return [];
     }
   }

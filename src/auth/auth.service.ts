@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -234,9 +234,7 @@ export class AuthService {
       where: { name: ERole.LEARNER },
     });
     if (!learnerRole) {
-      throw new NotFoundException(
-        'LEARNER role not found. Please seed database.',
-      );
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Role');
     }
 
     const accountDataToSave: Partial<Account> = {
@@ -364,8 +362,7 @@ export class AuthService {
           verificationCode: verificationCode,
         },
       });
-    } catch (error) {
-      console.error('Failed to send email:', error);
+    } catch {
       throw new AppException(ErrorCode.MAIL_SEND_FAILED);
     }
   }
@@ -503,9 +500,7 @@ export class AuthService {
         where: { name: ERole.LEARNER },
       });
       if (!learnerRole) {
-        throw new NotFoundException(
-          'LEARNER role not found. Please seed database.',
-        );
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Role');
       }
 
       const accountData: Partial<Account> = {
@@ -651,10 +646,7 @@ export class AuthService {
     }
 
     if (!account.password || account.password === '{oauth2}') {
-      throw new AppException(
-        ErrorCode.INVALID_CREDENTIALS,
-        'Account has no password',
-      );
+      throw new AppException(ErrorCode.INVALID_CREDENTIALS);
     }
 
     const isMatch = await bcrypt.compare(dto.oldPassword, account.password);

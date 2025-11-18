@@ -1,24 +1,52 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, Not } from 'typeorm';
+import { Repository, FindManyOptions, Like, Not, DataSource } from 'typeorm';
 import { Test } from '../entities/test.entity';
-import { TestSet } from '../entities/test-set.entity';
 import { Part } from '../entities/part.entity';
 import { QuestionGroup } from '../entities/question-group.entity';
-import { Question } from '../entities/question.entity';
-import { Tag } from '../entities/tag.entity';
 import { PageRequestDto } from './dto/page-request.dto';
 import { ETestSetStatus } from '../enums/ETestSetStatus.enum';
 import { ETestStatus } from '../enums/ETestStatus.enum';
 import { GetTestsAdminDto } from './dto/get-tests-admin.dto';
+import { TestRequestDto } from './dto/test-request.dto';
+import { AppException } from 'src/exceptions/app.exception';
+import { ErrorCode } from 'src/enums/ErrorCode.enum';
+import { TestSet } from 'src/entities/test-set.entity';
+import { QuestionExcelRequestDto } from './dto/question-excel-request.dto';
+import * as XLSX from 'xlsx';
+import { extractGroupNumber } from 'src/common/utils/code-generator.util';
+import { PartService } from 'src/part/part.service';
+import { QuestionGroupService } from 'src/question-group/question-group.service';
+import { QuestionService } from 'src/question/question.service';
+import { TagService } from 'src/tag/tag.service';
+import { TestSetService } from 'src/test-set/test-set.service';
+import { LearnerTestDetailResponse } from './dto/learner-test-detail-response.dto';
+import { TestExcelMapper } from './mapper/test.mapper';
+import { ConstraintViolationException } from 'src/exceptions/handles/constraint-violation.exception';
+
+type ExcelCell = string | number | null;
+type ExcelRow = ExcelCell[];
+interface LearnerTestRawRow {
+  testId: number;
+  testName: string;
+  numberOfLearnedTests: number;
+  partId: number;
+  partName: string;
+  tagNames: string | null;
+}
 
 @Injectable()
 export class TestService {
   constructor(
     @InjectRepository(Test)
-    private testRepository: Repository<Test>,
-    @InjectRepository(QuestionGroup)
-    private qgRepository: Repository<QuestionGroup>,
+    private readonly testRepository: Repository<Test>,
+    private readonly testSetService: TestSetService,
+    private readonly tagService: TagService,
+    private readonly partService: PartService,
+    private readonly questionGroupService: QuestionGroupService,
+    private readonly questionService: QuestionService,
+    private dataSource: DataSource,
+    private readonly testExcelMapper: TestExcelMapper,
   ) {}
 
   /**
@@ -78,7 +106,9 @@ export class TestService {
    * This translates the native SQL query from `TestRepository.java`
    * (`findListTagByIdOrderByPartName`) into a TypeORM QueryBuilder.
    */
-  async getLearnerTestDetailById(id: number) {
+  async getLearnerTestDetailById(
+    id: number,
+  ): Promise<LearnerTestDetailResponse> {
     const testWithDetails = await this.testRepository
       .createQueryBuilder('t')
       .select([
@@ -98,10 +128,10 @@ export class TestService {
       .andWhere('t.status = :status', { status: ETestStatus.APPROVED })
       .groupBy('t.id, t.name, t.numberOfLearnerTests, p.name, p.id')
       .orderBy('p.id', 'ASC')
-      .getRawMany();
+      .getRawMany<LearnerTestRawRow>();
 
     if (!testWithDetails || testWithDetails.length === 0) {
-      throw new NotFoundException('Test not found');
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
     }
 
     // Process the raw query result
@@ -184,19 +214,12 @@ export class TestService {
     });
 
     if (!test) {
-      throw new NotFoundException(`Test with ID ${id} not found`);
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
     }
 
     // Fetch all related data in a more efficient way than the Java N+1 loop
-    const questionGroups = await this.qgRepository.find({
-      where: { test: { id: id } },
-      relations: ['part', 'questions', 'questions.tags'],
-      order: {
-        part: { id: 'ASC' }, // Order by part
-        position: 'ASC', // Then by group position
-        questions: { position: 'ASC' }, // Then by question position
-      },
-    });
+    const questionGroups =
+      await this.questionGroupService.getQuestionGroupAsc(id);
 
     // Manually group by Part
     const groupedByPart = new Map<Part, QuestionGroup[]>();
@@ -251,5 +274,147 @@ export class TestService {
       updatedAt: test.updatedAt,
       partResponses: partResponses,
     };
+  }
+
+  async importTest(
+    file: Express.Multer.File,
+    request: TestRequestDto,
+  ): Promise<void> {
+    if (!this.isValidFile(file)) {
+      throw new AppException(ErrorCode.INVALID_FILE_FORMAT);
+    }
+
+    const testSet = await this.testSetService.getTestSet(request.testSetId);
+    if (!testSet) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test set');
+    }
+
+    // Dùng transaction giống @Transactional
+    await this.dataSource.transaction(async (manager) => {
+      const test = await this.createTest(
+        manager.getRepository(Test),
+        request.testName,
+        testSet,
+      );
+      const questionExcelRequests = this.readFile(file);
+      await this.processQuestions(test, questionExcelRequests);
+    });
+  }
+
+  readFile(file: Express.Multer.File): QuestionExcelRequestDto[] {
+    try {
+      const workbook: XLSX.WorkBook = XLSX.read(file.buffer, {
+        type: 'buffer',
+      });
+      const sheetName: string = workbook.SheetNames[0];
+      const worksheet: XLSX.WorkSheet = workbook.Sheets[sheetName];
+
+      const rows: ExcelRow[] = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, {
+        header: 1, // mảng mảng, tự map cột
+        defval: null,
+      });
+
+      const result: QuestionExcelRequestDto[] = [];
+
+      // Bỏ row header (index 0), bắt đầu từ i = 1
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        const dto = this.testExcelMapper.mapRowToDTO(row);
+        if (dto) result.push(dto);
+      }
+
+      return result;
+    } catch {
+      throw new AppException(ErrorCode.FILE_READ_ERROR);
+    }
+  }
+
+  private async createTest(
+    testRepo: Repository<Test>,
+    testName: string,
+    testSet: TestSet,
+  ): Promise<Test> {
+    const test = testRepo.create({
+      name: testName,
+      status: ETestStatus.PENDING, // enum ETestStatus.PENDING
+      testSet,
+      numberOfLearnerTests: 0,
+    });
+    return testRepo.save(test);
+  }
+
+  isValidFile(file: Express.Multer.File): boolean {
+    const filePath = file.originalname;
+    if (!filePath) return false;
+    return (
+      filePath.endsWith('.xlsx') ||
+      filePath.endsWith('.xls') ||
+      filePath.endsWith('.xlsm')
+    );
+  }
+
+  private async processQuestions(
+    test: Test,
+    questions: QuestionExcelRequestDto[],
+  ): Promise<void> {
+    const sortedQuestions = [...questions].sort((a, b) => {
+      const aNum = a.numberOfQuestions ?? Number.MAX_SAFE_INTEGER;
+      const bNum = b.numberOfQuestions ?? Number.MAX_SAFE_INTEGER;
+      return aNum - bNum;
+    });
+
+    const groupedQuestions = new Map<number, QuestionExcelRequestDto[]>();
+
+    for (const question of sortedQuestions) {
+      const groupNumber = extractGroupNumber(question.questionGroupId ?? null);
+      console.log(question);
+      if (groupNumber == null) {
+        if (question.numberOfQuestions == null)
+          throw new AppException(ErrorCode.VALIDATION_ERROR);
+      }
+      const groupKey = groupNumber ?? -question.numberOfQuestions!;
+      if (!groupedQuestions.has(groupKey)) {
+        groupedQuestions.set(groupKey, []);
+      }
+      groupedQuestions.get(groupKey)!.push(question);
+    }
+
+    for (const [, group] of groupedQuestions.entries()) {
+      await this.processQuestionGroup(test, group);
+    }
+  }
+
+  private async processQuestionGroup(
+    test: Test,
+    groupQuestions: QuestionExcelRequestDto[],
+  ): Promise<void> {
+    try {
+      const firstQuestion = groupQuestions[0];
+      if (!firstQuestion) return;
+      const partNumber = firstQuestion.partNumber;
+      if (partNumber == null) {
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Part');
+      }
+
+      const part = await this.partService.getPartById(partNumber);
+
+      const questionGroup = await this.questionGroupService.createQuestionGroup(
+        test,
+        part,
+        firstQuestion,
+      );
+
+      for (const dto of groupQuestions) {
+        const tags = await this.tagService.getTagsFromString(dto.tags);
+        // await this.questionService.createQuestion(dto, questionGroup, tags);
+        await this.questionService.createQuestion(dto, questionGroup, tags);
+      }
+    } catch (e) {
+      if (e instanceof ConstraintViolationException) throw e;
+      if (e instanceof AppException) throw e;
+      throw new AppException(ErrorCode.FILE_READ_ERROR);
+    }
   }
 }

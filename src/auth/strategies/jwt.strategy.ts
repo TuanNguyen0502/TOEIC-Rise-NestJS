@@ -3,7 +3,16 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { BlacklistService } from '../blacklist/blacklist.service';
+import { ERole } from 'src/enums/ERole.enum';
+import { RequestUser } from 'src/common/bases/request-user.dto';
 
+export interface JwtPayload {
+  userId: number;
+  email: string;
+  roles: ERole[];
+  exp: number;
+  iat: number;
+}
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -22,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * Payload là nội dung đã được giải mã từ JWT (từ hàm login() của bạn)
    * Bất cứ thứ gì được trả về ở đây sẽ được gán vào `request.user`
    */
-  async validate(payload: any) {
+  validate(payload: JwtPayload): RequestUser {
     // Chúng ta tin tưởng payload vì strategy đã tự động xác thực chữ ký.
     // Logic của UserDetailServiceImpl.java (load user từ DB) là không cần thiết
     // nếu mọi thông tin bạn cần (như roles) đã có trong token.
@@ -31,9 +40,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // bạn có thể inject UserService và kiểm tra ở đây.
 
     return {
-      userId: payload.sub,
+      userId: payload.userId,
       email: payload.email,
-      roles: payload.roles,
+      roles: payload.roles ?? [],
     };
   }
 }

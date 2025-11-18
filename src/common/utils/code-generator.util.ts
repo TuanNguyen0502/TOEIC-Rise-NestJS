@@ -1,4 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
+import { AppException } from 'src/exceptions/app.exception';
+import { ErrorCode } from 'src/enums/ErrorCode.enum';
 
 /**
  * Generates a 6-digit verification code.
@@ -13,7 +14,9 @@ export function generateVerificationCode(): string {
  * @param questionGroupId The string to parse.
  * @returns The group number or null.
  */
-export function extractGroupNumber(questionGroupId: string): number | null {
+export function extractGroupNumber(
+  questionGroupId: string | null,
+): number | null {
   if (!questionGroupId) {
     return null;
   }
@@ -23,8 +26,8 @@ export function extractGroupNumber(questionGroupId: string): number | null {
       const num = parseInt(parts[1], 10);
       return isNaN(num) ? null : num;
     }
-  } catch (e) {
-    throw new BadRequestException('Invalid questionGroupId format');
+  } catch {
+    throw new AppException(ErrorCode.VALIDATION_ERROR);
   }
   return null;
 }

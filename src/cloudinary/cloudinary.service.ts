@@ -4,6 +4,7 @@ import {
   type UploadApiResponse,
   type UploadApiErrorResponse,
 } from 'cloudinary';
+import { MessageConstant } from 'src/common/constants/messages.constant';
 
 @Injectable()
 export class CloudinaryService {
@@ -17,7 +18,10 @@ export class CloudinaryService {
           err: UploadApiErrorResponse | undefined,
           res: UploadApiResponse | undefined,
         ) => {
-          if (err) return reject(err);
+          if (err)
+            return reject(
+              new Error(err.message || MessageConstant.CLOUDINARY_ERROR),
+            );
           if (!res) return reject(new Error('Empty Cloudinary response'));
           return resolve(res.secure_url);
         },
