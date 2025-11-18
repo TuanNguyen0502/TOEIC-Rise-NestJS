@@ -29,11 +29,6 @@ export class TestExcelMapper {
     const explanation = this.getCellValueAsString(row[13]);
     const transcript = this.getCellValueAsString(row[14]);
 
-    // Điều kiện bỏ row trống (giống logic bạn đang dùng)
-    if (!question && !passageText) {
-      return null;
-    }
-
     const dto: QuestionExcelRequestDto = {
       partNumber,
       questionGroupId,

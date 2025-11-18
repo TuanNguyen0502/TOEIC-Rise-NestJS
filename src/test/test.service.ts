@@ -289,16 +289,13 @@ export class TestService {
       throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test set');
     }
 
-    // Dùng transaction giống @Transactional
-    await this.dataSource.transaction(async (manager) => {
-      const test = await this.createTest(
-        manager.getRepository(Test),
-        request.testName,
-        testSet,
-      );
-      const questionExcelRequests = this.readFile(file);
-      await this.processQuestions(test, questionExcelRequests);
-    });
+    const test = await this.createTest(
+      this.testRepository,
+      request.testName,
+      testSet,
+    );
+    const questionExcelRequests = this.readFile(file);
+    await this.processQuestions(test, questionExcelRequests);
   }
 
   readFile(file: Express.Multer.File): QuestionExcelRequestDto[] {
@@ -369,18 +366,16 @@ export class TestService {
 
     for (const question of sortedQuestions) {
       const groupNumber = extractGroupNumber(question.questionGroupId ?? null);
-      console.log(question);
-      if (groupNumber == null) {
-        if (question.numberOfQuestions == null)
-          throw new AppException(ErrorCode.VALIDATION_ERROR);
-      }
+      // if (groupNumber == null) {
+      //   if (question.numberOfQuestions == null)
+      //     throw new AppException(ErrorCode.VALIDATION_ERROR);
+      // }
       const groupKey = groupNumber ?? -question.numberOfQuestions!;
       if (!groupedQuestions.has(groupKey)) {
         groupedQuestions.set(groupKey, []);
       }
       groupedQuestions.get(groupKey)!.push(question);
     }
-
     for (const [, group] of groupedQuestions.entries()) {
       await this.processQuestionGroup(test, group);
     }
