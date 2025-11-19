@@ -23,6 +23,8 @@ import { TestSetService } from 'src/test-set/test-set.service';
 import { LearnerTestDetailResponse } from './dto/learner-test-detail-response.dto';
 import { TestExcelMapper } from './mapper/test.mapper';
 import { ConstraintViolationException } from 'src/exceptions/handles/constraint-violation.exception';
+import { PageResponse } from 'src/test-set/dto/page-response.dto';
+import { GetTestSetDetailQueryDto } from 'src/test-set/dto/get-test-set-detail-query.dto';
 
 type ExcelCell = string | number | null;
 type ExcelRow = ExcelCell[];
@@ -427,5 +429,51 @@ export class TestService {
     }
 
     await this.testRepository.save(tests);
+  }
+
+  async getTestsByTestSetId(
+    testSetId: number,
+    dto: GetTestSetDetailQueryDto,
+  ): Promise<PageResponse<any>> {
+    const { page, size, sortBy, direction, name, status } = dto;
+
+    const where: FindManyOptions<Test>['where'] = {
+      testSet: { id: testSetId },
+    };
+
+    if (name) {
+      where.name = Like(`%${name}%`);
+    }
+
+    if (status) {
+      where.status = status;
+    } else {
+      where.status = Not(ETestStatus.DELETED);
+    }
+
+    const [result, total] = await this.testRepository.findAndCount({
+      where,
+      order: { [sortBy]: direction },
+      take: size,
+      skip: page * size,
+    });
+
+    const testResponses = result.map((test) => ({
+      id: test.id,
+      name: test.name,
+      status: test.status,
+      createdAt: test.createdAt,
+      updatedAt: test.updatedAt,
+    }));
+
+    return {
+      meta: {
+        page,
+        pageSize: size,
+        pages: Math.ceil(total / size),
+        total,
+      },
+      result: testResponses,
+    };
   }
 }
