@@ -19,6 +19,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TestRequestDto } from './dto/test-request.dto';
+import { ParseAndValidateJsonPipe } from 'src/common/pipes/parse-and-validate-json.pipe';
 
 @ApiTags('admin/tests')
 @ApiBearerAuth('JWT') // For Swagger UI
@@ -42,7 +43,8 @@ export class AdminTestController {
   @UseInterceptors(FileInterceptor('file'))
   async importTests(
     @UploadedFile() file: Express.Multer.File,
-    @Body() testRequest: TestRequestDto,
+    @Body('testRequest', new ParseAndValidateJsonPipe(TestRequestDto))
+    testRequest: any,
   ) {
     await this.testService.importTest(file, testRequest);
     return { message: 'Test imported' };
