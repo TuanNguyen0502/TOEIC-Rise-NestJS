@@ -19,6 +19,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
 import { CreateTestSetRequestDto } from './dto/create-test-set-request.dto';
 import { GetTestSetsAdminDto } from './dto/get-test-sets-admin.dto';
+import { GetTestSetDetailQueryDto } from './dto/get-test-set-detail-query.dto';
 
 @ApiTags('admin/test-sets')
 @ApiBearerAuth('JWT')
@@ -32,6 +33,14 @@ export class AdminTestSetController {
   async getAllTestSets(@Query() query: GetTestSetsAdminDto) {
     return this.testSetService.getAllTestSetsAdmin(query);
   }
+
+  @Get(':id')
+  async getTestSetDetailById(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: GetTestSetDetailQueryDto,
+  ) {
+    return this.testSetService.getTestSetDetailById(id, query);
+}
 
   @Post()
   async createTestSet(@Body() createTestSetRequest: CreateTestSetRequestDto) {

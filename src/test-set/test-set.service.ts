@@ -11,6 +11,7 @@ import { TestService } from 'src/test/test.service';
 import { UpdateTestSetRequestDto } from './dto/update-test-set-request.dto';
 import { CreateTestSetRequestDto } from './dto/create-test-set-request.dto';
 import { GetTestSetsAdminDto } from './dto/get-test-sets-admin.dto';
+import { GetTestSetDetailQueryDto } from './dto/get-test-set-detail-query.dto';
 
 @Injectable()
 export class TestSetService {
@@ -28,6 +29,18 @@ export class TestSetService {
     });
 
     return testSets.map(TestSetMapper.toTestSetResponse);
+  }
+
+  async getTestSetDetailById(id: number, query: GetTestSetDetailQueryDto) {
+    const testSet = await this.testSetRepository.findOne({ where: { id } });
+
+    if (!testSet) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test set');
+    }
+
+    const testResponses = await this.testService.getTestsByTestSetId(id, query);
+
+    return TestSetMapper.toTestSetDetailResponse(testSet, testResponses);
   }
 
   async getAllTestSetsAdmin(dto: GetTestSetsAdminDto) {
