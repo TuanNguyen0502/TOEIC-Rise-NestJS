@@ -1,7 +1,8 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { TestSet } from './test-set.entity';
 import { ETestStatus } from '../enums/ETestStatus.enum';
+import { QuestionGroup } from './question-group.entity';
 
 @Entity({ name: 'tests' })
 export class Test extends BaseEntity {
@@ -22,4 +23,7 @@ export class Test extends BaseEntity {
   @ManyToOne(() => TestSet)
   @JoinColumn({ name: 'test_set_id' })
   testSet: TestSet;
+
+  @OneToMany(() => QuestionGroup, (questionGroup) => questionGroup.test)
+  questionGroups: QuestionGroup[];
 }
