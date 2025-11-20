@@ -73,6 +73,9 @@ export class QuestionService {
     // 4. Update the question entity
     question.questionGroup = questionGroup;
     question.content = dto.content ?? question.content;
+    question.correctOption = dto.correctOption;
+    question.explanation = dto.explanation;
+    question.tags = tags;
 
     // Convert Map-like object { A: "text", B: "text" } to string[]
     if (dto.options) {
