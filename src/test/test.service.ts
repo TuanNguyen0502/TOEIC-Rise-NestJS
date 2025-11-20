@@ -206,9 +206,8 @@ export class TestService {
 
   /**
    * Corresponds to: testService.getTestDetailById(id)
-   *
-   * This replicates the logic from TestServiceImpl.java and
-   * QuestionGroupServiceImpl.java to build the detailed DTO.
+   * * This replicates the logic from TestServiceImpl.java but optimizes
+   * the data fetching to avoid N+1 queries.
    */
   async getAdminTestDetailById(id: number) {
     const test = await this.testRepository.findOne({
@@ -219,27 +218,36 @@ export class TestService {
       throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
     }
 
-    // Fetch all related data in a more efficient way than the Java N+1 loop
+    // Fetch question groups.
+    // IMPORTANT: Ensure 'getQuestionGroupAsc' in QuestionGroupService loads relations:
+    // ['part', 'questions', 'questions.tags']
     const questionGroups =
       await this.questionGroupService.getQuestionGroupAsc(id);
 
-    // Manually group by Part
-    const groupedByPart = new Map<Part, QuestionGroup[]>();
+    // Manually group by Part ID (using primitive ID is safer than Object reference in JS Map)
+    const groupsMap = new Map<
+      number,
+      { part: Part; groups: QuestionGroup[] }
+    >();
 
     for (const qg of questionGroups) {
       if (!qg.part) continue;
 
-      // If the part is not in the map yet, initialize it with an empty array
-      if (!groupedByPart.has(qg.part)) {
-        groupedByPart.set(qg.part, []);
+      const partId = qg.part.id;
+
+      // Initialize if not exists
+      if (!groupsMap.has(partId)) {
+        groupsMap.set(partId, { part: qg.part, groups: [] });
       }
-      groupedByPart.get(qg.part)!.push(qg); // The '!' non-null assertion is safe here
+
+      // Push to the existing group
+      groupsMap.get(partId)!.groups.push(qg);
     }
 
     // Build the PartResponse DTOs
-    const partResponses = Array.from(groupedByPart.entries()).map(
-      ([part, groups]) => {
-        // Build the QuestionGroupResponse DTOs
+    const partResponses = Array.from(groupsMap.values())
+      .map(({ part, groups }) => {
+        // Map to QuestionGroupResponse
         const questionGroupResponses = groups.map((qg) => ({
           id: qg.id,
           audioUrl: qg.audioUrl,
@@ -247,15 +255,15 @@ export class TestService {
           passage: qg.passage,
           transcript: qg.transcript,
           position: qg.position,
-          // Build the QuestionResponse DTOs
-          questions: qg.questions.map((q) => ({
+          // Map to QuestionResponse
+          questions: (qg.questions || []).map((q) => ({
             id: q.id,
             position: q.position,
             content: q.content,
-            options: q.options,
+            options: q.options, // StringListTransformer handles JSON parsing
             correctOption: q.correctOption,
             explanation: q.explanation,
-            tags: q.tags.map((t) => t.name),
+            tags: (q.tags || []).map((t) => t.name),
           })),
         }));
 
@@ -264,8 +272,9 @@ export class TestService {
           name: part.name,
           questionGroups: questionGroupResponses,
         };
-      },
-    );
+      })
+      // Match Java: Sort parts by Name alphabetically
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     // Build the final TestDetailResponse DTO
     return {
