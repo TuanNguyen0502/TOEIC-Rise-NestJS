@@ -31,20 +31,22 @@ export class StringListTransformer implements ValueTransformer {
    * Used to unmarshal data when reading from the database.
    */
   from(value: string | null): string[] {
-    if (!value) {
+    if (value == null) {
       return [];
     }
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (
-        Array.isArray(parsed) &&
-        parsed.every((item) => typeof item === 'string')
-      ) {
-        return parsed;
+    if (Array.isArray(value)) {
+      return value.map((v) => String(v));
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map((v) => String(v));
+        }
+      } catch {
+        return [];
       }
-      return [];
-    } catch {
-      return [];
     }
+    return [];
   }
 }

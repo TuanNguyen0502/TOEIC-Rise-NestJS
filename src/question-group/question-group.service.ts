@@ -32,6 +32,7 @@ export class QuestionGroupService {
     // TypeORM findOne() trả về entity | null
     return await this.questionGroupRepo.findOne({
       where: { id },
+      relations: ['part', 'questions'],
     });
   }
 
