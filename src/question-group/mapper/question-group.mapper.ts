@@ -3,6 +3,7 @@ import { QuestionGroup } from 'src/entities/question-group.entity';
 import { Test } from 'src/entities/test.entity';
 import { Part } from 'src/entities/part.entity';
 import { QuestionExcelRequestDto } from 'src/test/dto/question-excel-request.dto';
+import { LearnerTestQuestionGroupResponse } from 'src/user-test/dto/learner-test-question-group-response.dto';
 
 @Injectable()
 export class QuestionGroupMapper {
@@ -22,5 +23,19 @@ export class QuestionGroupMapper {
     qg.transcript = excelRequest.transcript || undefined;
 
     return qg;
+  }
+
+  toLearnerTestQuestionGroupResponse(
+    qg: QuestionGroup,
+  ): LearnerTestQuestionGroupResponse {
+    return {
+      id: qg.id,
+      audioUrl: qg.audioUrl,
+      imageUrl: qg.imageUrl,
+      passage: qg.passage,
+      transcript: qg.transcript,
+      position: qg.position,
+      questions: [],
+    };
   }
 }

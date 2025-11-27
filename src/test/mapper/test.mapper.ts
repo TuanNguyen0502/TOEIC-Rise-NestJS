@@ -1,6 +1,8 @@
 // test-excel.mapper.ts
 
+import { Test } from 'src/entities/test.entity';
 import { QuestionExcelRequestDto } from '../dto/question-excel-request.dto';
+import { LearnerTestPartsResponse } from 'src/user-test/dto/learner-test-parts-response.dto';
 
 // Mỗi row là một mảng các ô trong Excel
 export type ExcelRow = Array<string | number | null>;
@@ -82,5 +84,13 @@ export class TestExcelMapper {
       return Number.isNaN(parsed) ? null : parsed;
     }
     return null;
+  }
+
+  toLearnerTestPartsResponse(test: Test): LearnerTestPartsResponse {
+    return {
+      id: test.id,
+      testName: test.name,
+      partResponses: [],
+    };
   }
 }

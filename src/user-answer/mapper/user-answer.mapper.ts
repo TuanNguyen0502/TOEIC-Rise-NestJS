@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { UserAnswer } from 'src/entities/user-answer.entity';
 import { QuestionGroup } from 'src/entities/question-group.entity';
 import { UserAnswerDetailResponse } from 'src/user-test/dto/user-answer-detail-response.dto';
+import { LearnerAnswerResponse } from 'src/user-test/dto/learner-answer-response.dto';
 
 @Injectable()
 export class UserAnswerMapper {
@@ -32,6 +33,20 @@ export class UserAnswerMapper {
       options,
       correctOption: question.correctOption,
       explanation: question.explanation,
+    };
+  }
+
+  toLearnerAnswerResponse(ua: UserAnswer): LearnerAnswerResponse {
+    return {
+      learnerAnswerId: ua.id,
+      questionId: ua.question.id,
+      position: ua.question.position,
+      content: ua.question.content,
+      options: ua.question.options,
+      correctOption: ua.question.correctOption,
+      explanation: ua.question.explanation ?? '',
+      userAnswer: ua.answer ?? '',
+      isCorrect: ua.isCorrect,
     };
   }
 }

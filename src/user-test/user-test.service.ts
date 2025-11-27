@@ -24,6 +24,12 @@ import { QuestionGroupService } from 'src/question-group/question-group.service'
 import { UserAnswerRequest } from './dto/user-answer-request.dto';
 import { QuestionService } from 'src/question/question.service';
 import { UserTestMapper } from './mapper/user-test.mapper';
+import { TestExcelMapper } from 'src/test/mapper/test.mapper';
+import { groupBy } from 'src/common/utils/group-by.utils';
+import { PartMapper } from 'src/part/mapper/part.mapper';
+import { QuestionGroupMapper } from 'src/question-group/mapper/question-group.mapper';
+import { UserAnswerMapper } from 'src/user-answer/mapper/user-answer.mapper';
+import { LearnerTestPartResponse } from './dto/learner-test-part-response.dto';
 
 type LearnerTestHistoryRawRow = {
   id: number | string;
@@ -49,6 +55,10 @@ export class UserTestService {
     private readonly userTestMapper: UserTestMapper,
     @InjectRepository(UserAnswer)
     private readonly userAnswerRepository: Repository<UserAnswer>,
+    private readonly testMapper: TestExcelMapper,
+    private readonly partMapper: PartMapper,
+    private readonly questionGroupMapper: QuestionGroupMapper,
+    private readonly userAnswerMapper: UserAnswerMapper,
   ) {}
 
   async allLearnerTestHistories(
@@ -385,5 +395,65 @@ export class UserTestService {
     userTest.totalScore = userTest.listeningScore + userTest.readingScore;
     userTest.totalListeningQuestions = listeningQuestion;
     userTest.totalReadingQuestions = readingQuestion;
+  }
+
+  async getUserTestDetail(id: number, email: string) {
+    const userTest = await this.userTestRepository
+      .createQueryBuilder('ut')
+      .leftJoinAndSelect('ut.test', 't')
+      .leftJoinAndSelect('ut.userAnswers', 'ua')
+      .leftJoinAndSelect('ua.question', 'q')
+      .leftJoinAndSelect('q.questionGroup', 'qg')
+      .leftJoinAndSelect('qg.part', 'p')
+      .leftJoinAndSelect('ut.user', 'u')
+      .leftJoinAndSelect('u.account', 'acc')
+      .where('ut.id = :id', { id })
+      .andWhere('acc.email = :email', { email })
+      .getOne();
+    if (!userTest) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User test');
+    }
+
+    const response = this.testMapper.toLearnerTestPartsResponse(userTest.test);
+
+    const answerByPart = groupBy(
+      userTest.userAnswers,
+      (ua) => ua.question.questionGroup.part,
+    );
+
+    let partResponses: LearnerTestPartResponse[] = [];
+
+    for (const [part, answers] of answerByPart) {
+      const partResponse = this.partMapper.toLearnerTestPartResponse(part);
+
+      const answerByGroup = groupBy(answers, (ua) => ua.question.questionGroup);
+
+      const questionGroupResponses = [...answerByGroup.entries()]
+        .sort((a, b) => a[0].position - b[0].position)
+        .map(([questionGroup, userAnswers]) => {
+          const questionGroupResp =
+            this.questionGroupMapper.toLearnerTestQuestionGroupResponse(
+              questionGroup,
+            );
+
+          const questionAndAnswers = userAnswers
+            .sort((a, b) => a.question.position - b.question.position)
+            .map((ua) => this.userAnswerMapper.toLearnerAnswerResponse(ua));
+
+          questionGroupResp.questions = questionAndAnswers;
+          return questionGroupResp;
+        });
+
+      partResponse.questionGroups = questionGroupResponses;
+      partResponses.push(partResponse);
+    }
+
+    // Sort part by name
+    partResponses = partResponses.sort((a, b) =>
+      a.partName.localeCompare(b.partName),
+    );
+
+    response.partResponses = partResponses;
+    return response;
   }
 }

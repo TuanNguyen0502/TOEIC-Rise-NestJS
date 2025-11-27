@@ -35,4 +35,12 @@ export class UserTestController {
   ): Promise<TestResultResponseDto> {
     return this.userTestService.getUserTestResultById(email, userTestId);
   }
+
+  @Get('detail/:userTestId')
+  async getTestDetail(
+    @Param('userTestId') userTestId: number,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    return this.userTestService.getUserTestDetail(userTestId, email);
+  }
 }

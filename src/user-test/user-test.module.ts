@@ -11,6 +11,10 @@ import { UserTestMapper } from './mapper/user-test.mapper';
 import { UserModule } from 'src/user/user.module';
 import { Test } from 'src/entities/test.entity';
 import { UserAnswer } from 'src/entities/user-answer.entity';
+import { TestExcelMapper } from 'src/test/mapper/test.mapper';
+import { PartMapper } from 'src/part/mapper/part.mapper';
+import { QuestionGroupMapper } from 'src/question-group/mapper/question-group.mapper';
+import { UserAnswerMapper } from 'src/user-answer/mapper/user-answer.mapper';
 
 @Module({
   imports: [
@@ -22,7 +26,14 @@ import { UserAnswer } from 'src/entities/user-answer.entity';
     QuestionModule,
   ],
   controllers: [UserTestController],
-  providers: [UserTestService, UserTestMapper],
+  providers: [
+    UserTestService,
+    UserTestMapper,
+    TestExcelMapper,
+    PartMapper,
+    QuestionGroupMapper,
+    UserAnswerMapper,
+  ],
   exports: [UserTestService],
 })
 export class UserTestModule {}
