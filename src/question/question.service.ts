@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Question } from '../entities/question.entity';
 import { QuestionGroup } from '../entities/question-group.entity';
 import { Tag } from '../entities/tag.entity';
@@ -109,5 +109,15 @@ export class QuestionService {
 
     // TypeORM sẽ tự insert/update + bảng join ManyToMany
     return await this.questionRepository.save(question);
+  }
+
+  async getQuestionEntitiesByIds(questionIds: number[]): Promise<Question[]> {
+    if (!questionIds?.length) {
+      return [];
+    }
+
+    return this.questionRepository.find({
+      where: { id: In(questionIds) },
+    });
   }
 }

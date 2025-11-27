@@ -1,14 +1,28 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserTest } from '../entities/user-test.entity';
 import { UserTestService } from './user-test.service';
 import { UserTestController } from './user-test.controller';
 import { AuthModule } from 'src/auth/auth.module';
+import { QuestionModule } from 'src/question/question.module';
+import { QuestionGroupModule } from 'src/question-group/question-group.module';
+import { TestModule } from 'src/test/test.module';
+import { UserTestMapper } from './mapper/user-test.mapper';
+import { UserModule } from 'src/user/user.module';
+import { Test } from 'src/entities/test.entity';
+import { UserAnswer } from 'src/entities/user-answer.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserTest]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([UserTest, Test, UserAnswer]),
+    AuthModule,
+    UserModule,
+    forwardRef(() => TestModule),
+    QuestionGroupModule,
+    QuestionModule,
+  ],
   controllers: [UserTestController],
-  providers: [UserTestService],
+  providers: [UserTestService, UserTestMapper],
   exports: [UserTestService],
 })
 export class UserTestModule {}

@@ -1,12 +1,27 @@
-import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { TestService } from './test.service';
 import { PageRequestDto } from './dto/page-request.dto';
 import { ApiTags } from '@nestjs/swagger';
+import { UserTestRequest } from 'src/user-test/dto/user-test-request.dto';
+import { TestResultOverallResponse } from './dto/test-result-overall-response.dto';
+import { UserTestService } from 'src/user-test/user-test.service';
+import { GetCurrentUserEmail } from 'src/common/utils/decorators/get-current-user.decorator';
 
 @ApiTags('tests')
 @Controller('tests')
 export class TestController {
-  constructor(private readonly testService: TestService) {}
+  constructor(
+    private readonly testService: TestService,
+    private readonly userTestService: UserTestService,
+  ) {}
 
   /**
    * Corresponds to:
@@ -32,5 +47,13 @@ export class TestController {
   @Get(':id')
   async getTestById(@Param('id', ParseIntPipe) id: number) {
     return this.testService.getLearnerTestDetailById(id);
+  }
+
+  @Post()
+  async submitTest(
+    @Body() request: UserTestRequest,
+    @GetCurrentUserEmail() email: string,
+  ): Promise<TestResultOverallResponse> {
+    return this.userTestService.calculateAndSaveUserTestResult(email, request);
   }
 }

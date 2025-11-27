@@ -1,6 +1,5 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { TestController } from './test.controller';
 import { TestService } from './test.service';
 import { Test } from '../entities/test.entity';
 import { TestSet } from '../entities/test-set.entity';
@@ -17,6 +16,8 @@ import { TagModule } from 'src/tag/tag.module';
 import { QuestionGroupModule } from 'src/question-group/question-group.module';
 import { QuestionModule } from 'src/question/question.module';
 import { TestExcelMapper } from './mapper/test.mapper';
+import { TestController } from './test.controller';
+import { UserTestModule } from 'src/user-test/user-test.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { TestExcelMapper } from './mapper/test.mapper';
       Tag,
     ]),
     AuthModule,
+    UserTestModule,
     PartModule,
     TestSetModule,
     TagModule,

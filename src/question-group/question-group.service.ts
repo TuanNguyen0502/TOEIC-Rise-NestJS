@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { QuestionGroup } from 'src/entities/question-group.entity';
 import { QuestionGroupMapper } from './mapper/question-group.mapper';
 import { Test } from 'src/entities/test.entity';
@@ -50,5 +50,30 @@ export class QuestionGroupService {
       throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'QuestionGroup');
     }
     return groups;
+  }
+
+  async checkQuestionGroupsExistByIds(ids: number[]) {
+    const groups = await this.questionGroupRepo.find({
+      where: { id: In(ids) },
+      select: ['id'],
+    });
+    const existing = groups.map((g) => g.id);
+    for (const id of ids) {
+      if (!existing.includes(id)) {
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question group');
+      }
+    }
+  }
+
+  async findAllByIdInFetchQuestions(ids: number[]) {
+    const qg = await this.questionGroupRepo.find({
+      where: { id: In(ids) },
+      relations: ['questions'],
+    });
+    return qg;
+  }
+
+  isListeningPart(part: Part): boolean {
+    return ['1', '2', '3', '4'].some((p) => part.name.includes(p));
   }
 }

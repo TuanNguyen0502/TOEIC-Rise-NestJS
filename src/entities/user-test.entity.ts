@@ -48,6 +48,12 @@ export class UserTest extends BaseEntity {
   @Column({ name: 'reading_correct_answers', type: 'int', nullable: true })
   readingCorrectAnswers?: number;
 
+  @Column({ name: 'total_listening_questions', type: 'int', nullable: true })
+  totalListeningQuestions?: number;
+
+  @Column({ name: 'total_reading_questions', type: 'int', nullable: true })
+  totalReadingQuestions?: number;
+
   @OneToMany(() => UserAnswer, (userAnswer) => userAnswer.userTest, {
     cascade: true,
   })

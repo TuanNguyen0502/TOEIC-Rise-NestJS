@@ -424,6 +424,12 @@ export class TestService {
     }
   }
 
+  async findOneById(id: number): Promise<Test | null> {
+    return this.testRepository.findOne({
+      where: { id },
+    });
+  }
+
   async deleteTestsByTestSetId(testSetId: number): Promise<void> {
     const tests = await this.testRepository.find({
       where: {

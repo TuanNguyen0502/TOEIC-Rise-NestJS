@@ -9,10 +9,21 @@ import { UserAnswerGroupedByTagResponseDto } from './dto/user-answer-grouped-by-
 import { formatInTimeZone } from 'date-fns-tz';
 import {
   DATE_TIME_PATTERN,
+  estimatedListeningScoreMap,
+  estimatedReadingScoreMap,
   TIMEZONE_VIETNAM,
 } from 'src/common/constants/constants';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
+import { UserTestRequest } from './dto/user-test-request.dto';
+import { TestResultOverallResponse } from 'src/test/dto/test-result-overall-response.dto';
+import { UserService } from 'src/user/user.service';
+import { TestService } from 'src/test/test.service';
+import { Test } from 'src/entities/test.entity';
+import { QuestionGroupService } from 'src/question-group/question-group.service';
+import { UserAnswerRequest } from './dto/user-answer-request.dto';
+import { QuestionService } from 'src/question/question.service';
+import { UserTestMapper } from './mapper/user-test.mapper';
 
 type LearnerTestHistoryRawRow = {
   id: number | string;
@@ -29,6 +40,15 @@ export class UserTestService {
   constructor(
     @InjectRepository(UserTest)
     private readonly userTestRepository: Repository<UserTest>,
+    private readonly userService: UserService,
+    private readonly testService: TestService,
+    @InjectRepository(Test)
+    private readonly testRepository: Repository<Test>,
+    private readonly questionGroupService: QuestionGroupService,
+    private readonly questionService: QuestionService,
+    private readonly userTestMapper: UserTestMapper,
+    @InjectRepository(UserAnswer)
+    private readonly userAnswerRepository: Repository<UserAnswer>,
   ) {}
 
   async allLearnerTestHistories(
@@ -197,5 +217,173 @@ export class UserTestService {
         : null,
       userAnswersByPart: userAnswersByPart,
     };
+  }
+
+  async calculateAndSaveUserTestResult(
+    email: string,
+    request: UserTestRequest,
+  ): Promise<TestResultOverallResponse> {
+    const user = await this.userService.findOneByEmail(email);
+    if (!user) throw new NotFoundException('User not found');
+
+    const test = await this.testService.findOneById(request.testId);
+    if (!test) throw new NotFoundException('Test not found');
+
+    test.numberOfLearnerTests += 1;
+    await this.testRepository.save(test);
+
+    const questionGroupIds = [
+      ...new Set(request.answers.map((a) => a.questionGroupId)),
+    ];
+    await this.questionGroupService.checkQuestionGroupsExistByIds(
+      questionGroupIds,
+    );
+
+    const userTest = this.userTestRepository.create({
+      user,
+      test,
+      totalQuestions: request.answers.length,
+      timeSpent: request.timeSpent,
+      parts: request.parts ?? [],
+    });
+
+    if (!request.parts || request.parts.length === 0) {
+      await this.calculateExamScore(userTest, request.answers);
+    } else {
+      await this.calculatePracticeScore(userTest, request.answers);
+    }
+
+    const saved = await this.userTestRepository.save(userTest);
+    return this.userTestMapper.mapToDto(saved);
+  }
+
+  private async calculatePracticeScore(
+    userTest: UserTest,
+    answers: UserAnswerRequest[],
+  ) {
+    let correctAnswers = 0;
+    let listeningQuestion = 0;
+    let readingQuestion = 0;
+    let listeningCorrect = 0;
+    let readingCorrect = 0;
+
+    const questionIds = [...new Set(answers.map((a) => a.questionId))];
+    const questions =
+      await this.questionService.getQuestionEntitiesByIds(questionIds);
+    const map = new Map(questions.map((q) => [q.id, q]));
+
+    for (const item of answers) {
+      const question = map.get(item.questionId);
+      if (!question)
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+
+      const isCorrect = item.answer === question.correctOption;
+      const isListening = this.questionGroupService.isListeningPart(
+        question.questionGroup.part,
+      );
+
+      if (isListening) {
+        listeningQuestion++;
+        if (isCorrect) listeningCorrect++;
+      } else {
+        readingQuestion++;
+        if (isCorrect) readingCorrect++;
+      }
+
+      if (isCorrect) correctAnswers++;
+
+      const userAnswer = this.userAnswerRepository.create({
+        userTest,
+        question,
+        questionGroupId: item.questionGroupId,
+        answer: item.answer,
+        isCorrect,
+      });
+      userTest.userAnswers.push(userAnswer);
+    }
+
+    userTest.correctAnswers = correctAnswers;
+    userTest.totalListeningQuestions = listeningQuestion;
+    userTest.totalReadingQuestions = readingQuestion;
+    userTest.readingCorrectAnswers = readingCorrect;
+    userTest.listeningCorrectAnswers = listeningCorrect;
+    userTest.correctPercent = (correctAnswers / answers.length) * 100;
+  }
+
+  private async calculateExamScore(
+    userTest: UserTest,
+    answers: UserAnswerRequest[],
+  ) {
+    let correctAnswers = 0;
+    let listeningCorrect = 0;
+    let readingCorrect = 0;
+    let listeningQuestion = 0;
+    let readingQuestion = 0;
+
+    const grouped = new Map<number, UserAnswerRequest[]>();
+    for (const a of answers) {
+      if (!grouped.has(a.questionGroupId)) grouped.set(a.questionGroupId, []);
+      grouped.get(a.questionGroupId)!.push(a);
+    }
+
+    const groupIds = [...grouped.keys()];
+    const groups =
+      await this.questionGroupService.findAllByIdInFetchQuestions(groupIds);
+
+    const groupMap = new Map(groups.map((g) => [g.id, g]));
+
+    for (const [groupId, groupAnswers] of grouped.entries()) {
+      const questionGroup = groupMap.get(groupId);
+      if (!questionGroup)
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question group');
+
+      const isListening = this.questionGroupService.isListeningPart(
+        questionGroup.part,
+      );
+
+      const questionMap = new Map(
+        questionGroup.questions.map((q) => [q.id, q]),
+      );
+
+      for (const item of groupAnswers) {
+        const question = questionMap.get(item.questionId);
+        if (!question)
+          throw new AppException(ErrorCode.RESOURCE_ALREADY_EXISTS, 'Question');
+
+        const isCorrect = item.answer === question.correctOption;
+
+        if (isCorrect) {
+          correctAnswers++;
+          if (isListening) listeningCorrect++;
+          else readingCorrect++;
+        }
+
+        if (isListening) listeningQuestion++;
+        else readingQuestion++;
+
+        userTest.userAnswers.push(
+          this.userAnswerRepository.create({
+            userTest,
+            question,
+            questionGroupId: item.questionGroupId,
+            answer: item.answer,
+            isCorrect,
+          }),
+        );
+      }
+    }
+
+    userTest.correctAnswers = correctAnswers;
+    userTest.correctPercent = (correctAnswers / answers.length) * 100;
+    userTest.listeningCorrectAnswers = listeningCorrect;
+    userTest.readingCorrectAnswers = readingCorrect;
+
+    userTest.listeningScore =
+      estimatedListeningScoreMap.get(listeningCorrect) ?? 0;
+    userTest.readingScore = estimatedReadingScoreMap.get(readingCorrect) ?? 0;
+
+    userTest.totalScore = userTest.listeningScore + userTest.readingScore;
+    userTest.totalListeningQuestions = listeningQuestion;
+    userTest.totalReadingQuestions = readingQuestion;
   }
 }
