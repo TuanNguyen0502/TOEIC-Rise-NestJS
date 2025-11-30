@@ -76,4 +76,34 @@ export class QuestionGroupService {
   isListeningPart(part: Part): boolean {
     return ['1', '2', '3', '4'].some((p) => part.name.includes(p));
   }
+
+  async getQuestionGroupsByTestIdGroupByParts(
+    testId: number,
+    partIds: number[],
+  ) {
+    // Find question groups for the test and specified parts
+    const questionGroups = await this.questionGroupRepo.find({
+      where: {
+        test: { id: testId },
+        part: { id: In(partIds) },
+      },
+      relations: ['part', 'questions', 'questions.tags'],
+      order: {
+        position: 'ASC',
+        questions: { position: 'ASC' },
+      },
+    });
+
+    // Group by Part
+    const groupedByPart = new Map();
+    questionGroups.forEach((group) => {
+      const part = group.part;
+      if (!groupedByPart.has(part.id)) {
+        groupedByPart.set(part.id, { part, groups: [] });
+      }
+      groupedByPart.get(part.id).groups.push(group);
+    });
+
+    return Array.from(groupedByPart.values());
+  }
 }

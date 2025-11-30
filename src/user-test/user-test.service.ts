@@ -30,6 +30,10 @@ import { PartMapper } from 'src/part/mapper/part.mapper';
 import { QuestionGroupMapper } from 'src/question-group/mapper/question-group.mapper';
 import { UserAnswerMapper } from 'src/user-answer/mapper/user-answer.mapper';
 import { LearnerTestPartResponse } from './dto/learner-test-part-response.dto';
+import { QuestionMapper } from 'src/question/mapper/question.mapper';
+import { LearnerTestQuestionResponse } from './dto/learner-test-question-response.dto';
+import { LearnerTestPartsResponse } from './dto/learner-test-parts-response.dto';
+import { ETestStatus } from 'src/enums/ETestStatus.enum';
 
 type LearnerTestHistoryRawRow = {
   id: number | string;
@@ -59,6 +63,7 @@ export class UserTestService {
     private readonly partMapper: PartMapper,
     private readonly questionGroupMapper: QuestionGroupMapper,
     private readonly userAnswerMapper: UserAnswerMapper,
+    private readonly questionMapper: QuestionMapper,
   ) {}
 
   async allLearnerTestHistories(
@@ -455,5 +460,48 @@ export class UserTestService {
 
     response.partResponses = partResponses;
     return response;
+  }
+
+  async getTestByIdAndParts(
+    testId: number,
+    parts: number[],
+  ): Promise<LearnerTestPartsResponse> {
+    // Find test by ID and status APPROVED
+    const test = await this.testRepository.findOne({
+      where: { id: testId, status: ETestStatus.APPROVED }
+    });
+
+    if (!test) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
+    }
+
+    // Get question groups grouped by parts
+    const partGroupData =
+      await this.questionGroupService.getQuestionGroupsByTestIdGroupByParts(
+        testId,
+        parts,
+    
+    // Map to response format
+    const partResponses: LearnerTestPartResponse[] = partGroupData.map(({ part, groups }) => {
+      const questionGroupResponses = groups
+        .sort((a, b) => a.position - b.position)
+        .map(group => {
+          const questionResponses: LearnerTestQuestionResponse[] = group.questions
+            .sort((a, b) => a.position - b.position)
+            .map(question => this.questionMapper.toLearnerTestQuestionResponse(question));
+          
+          const groupResponse = this.questionGroupMapper.toLearnerTestQuestionGroupResponse(group);
+          groupResponse.questions = questionResponses;
+          return groupResponse;
+        });
+
+      const partResponse = this.partMapper.toLearnerTestPartResponse(part);
+      partResponse.questionGroups = questionGroupResponses;
+      return partResponse;
+    }).sort((a, b) => a.partName.localeCompare(b.partName));
+
+    const learnerTestPartsResponse = this.testMapper.toLearnerTestPartsResponse(test);
+    learnerTestPartsResponse.partResponses = partResponses;
+    return learnerTestPartsResponse;
   }
 }

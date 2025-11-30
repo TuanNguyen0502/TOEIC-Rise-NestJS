@@ -25,6 +25,6 @@ import { QuestionMapper } from './mapper/question.mapper';
   ],
   controllers: [AdminQuestionController, QuestionController],
   providers: [QuestionService, RolesGuard, QuestionMapper], // Provide RolesGuard
-  exports: [QuestionService],
+  exports: [QuestionService, QuestionMapper],
 })
 export class QuestionModule {}

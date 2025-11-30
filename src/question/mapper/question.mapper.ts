@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { Question } from 'src/entities/question.entity';
 import { QuestionGroup } from 'src/entities/question-group.entity';
 import { QuestionExcelRequestDto } from 'src/test/dto/question-excel-request.dto';
+import { LearnerTestQuestionResponse } from 'src/user-test/dto/learner-test-question-response.dto';
 
 @Injectable()
 export class QuestionMapper {
@@ -26,5 +27,18 @@ export class QuestionMapper {
     q.explanation = excelRequest.explanation || undefined;
 
     return q;
+  }
+
+  toLearnerTestQuestionResponse(
+    question: Question,
+  ): LearnerTestQuestionResponse {
+    return {
+      id: question.id,
+      position: question.position,
+      content: question.content,
+      options: question.options?.map((option) =>
+        option === 'null' ? null : option,
+      ) || [null, null, null, null],
+    };
   }
 }

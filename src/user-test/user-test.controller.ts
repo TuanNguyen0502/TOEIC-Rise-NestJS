@@ -4,6 +4,7 @@ import {
   Param,
   ParseIntPipe,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { LearnerTestHistoryResponse } from './dto/learner-test-history-response.dto';
 import { TestResultResponseDto } from './dto/test-result-response.dto';
@@ -42,5 +43,16 @@ export class UserTestController {
     @GetCurrentUserEmail() email: string,
   ) {
     return this.userTestService.getUserTestDetail(userTestId, email);
+  }
+
+  @Get('exam/:id')
+  async getTestByParts(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('parts') parts: string,
+  ) {
+    const partIds = parts
+      ? parts.split(',').map((p) => parseInt(p.trim()))
+      : [];
+    return this.userTestService.getTestByIdAndParts(id, partIds);
   }
 }
