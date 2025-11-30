@@ -57,15 +57,10 @@ export class UserTestController {
   }
 
   @Get('answers-overall/:userTestId')
-  getUserAnswersOverallGroupedByPart(
+  async getUserAnswersOverallGroupedByPart(
     @Param('userTestId', ParseIntPipe) userTestId: number,
     @GetCurrentUserEmail() email: string,
-  ) {
-    const getAnswers = this.userTestService
-      .getUserAnswersGroupedByPart as unknown as (
-      email: string,
-      userTestId: number,
-    ) => Promise<Record<number, unknown>>;
-    return getAnswers(email, userTestId);
+  ): Promise<Record<string, any[]>> {
+    return await this.userTestService.getUserAnswersGroupedByPart(email, userTestId);
   }
 }
