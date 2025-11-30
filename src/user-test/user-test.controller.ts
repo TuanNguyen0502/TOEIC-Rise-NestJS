@@ -55,4 +55,17 @@ export class UserTestController {
       : [];
     return this.userTestService.getTestByIdAndParts(id, partIds);
   }
+
+  @Get('answers-overall/:userTestId')
+  getUserAnswersOverallGroupedByPart(
+    @Param('userTestId', ParseIntPipe) userTestId: number,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    const getAnswers = this.userTestService
+      .getUserAnswersGroupedByPart as unknown as (
+      email: string,
+      userTestId: number,
+    ) => Promise<Record<number, unknown>>;
+    return getAnswers(email, userTestId);
+  }
 }

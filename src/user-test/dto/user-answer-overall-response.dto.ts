@@ -4,3 +4,10 @@ export class UserAnswerOverallResponseDto {
   isCorrect: boolean;
   correctOption: string; // Optional: Good for frontend context
 }
+
+export class UserAnswerOverallResponse {
+  userAnswerId: number;
+  position: number;
+  correctAnswer: string;
+  userAnswer: string;
+}

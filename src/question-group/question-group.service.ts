@@ -106,4 +106,20 @@ export class QuestionGroupService {
 
     return Array.from(groupedByPart.values());
   }
+
+  async getPartNameByQuestionGroupId(questionGroupId: number): Promise<string> {
+    const questionGroup = await this.questionGroupRepo.findOne({
+      where: { id: questionGroupId },
+      relations: ['part'],
+    });
+
+    if (!questionGroup) {
+      throw new AppException(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        `Question group with ID ${questionGroupId}`,
+      );
+    }
+
+    return questionGroup.part.name;
+  }
 }

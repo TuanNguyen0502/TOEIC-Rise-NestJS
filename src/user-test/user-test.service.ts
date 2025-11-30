@@ -34,6 +34,7 @@ import { QuestionMapper } from 'src/question/mapper/question.mapper';
 import { LearnerTestQuestionResponse } from './dto/learner-test-question-response.dto';
 import { LearnerTestPartsResponse } from './dto/learner-test-parts-response.dto';
 import { ETestStatus } from 'src/enums/ETestStatus.enum';
+import { UserAnswerOverallResponse } from './dto/user-answer-overall-response.dto';
 
 type LearnerTestHistoryRawRow = {
   id: number | string;
@@ -480,6 +481,7 @@ export class UserTestService {
       await this.questionGroupService.getQuestionGroupsByTestIdGroupByParts(
         testId,
         parts,
+      );
     
     // Map to response format
     const partResponses: LearnerTestPartResponse[] = partGroupData.map(({ part, groups }) => {
@@ -503,5 +505,48 @@ export class UserTestService {
     const learnerTestPartsResponse = this.testMapper.toLearnerTestPartsResponse(test);
     learnerTestPartsResponse.partResponses = partResponses;
     return learnerTestPartsResponse;
+  }
+
+  async getUserAnswersGroupedByPart(email: string, userTestId: number): Promise<Record<string, UserAnswerOverallResponse[]>> {
+    // Find user test with answers and questions
+    const userTest = await this.userTestRepository.findOne({
+      where: { id: userTestId },
+      relations: [
+        'user',
+        'user.account',
+        'userAnswers',
+        'userAnswers.question',
+        'userAnswers.question.questionGroup',
+        'userAnswers.question.questionGroup.part'
+      ]
+    });
+
+    if (!userTest) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'UserTest');
+    }
+
+    // Verify that the userTest belongs to the user with the given email
+    if (userTest.user.account.email !== email) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test Result');
+    }
+
+    const result: Record<string, UserAnswerOverallResponse[]> = {};
+
+    for (const userAnswer of userTest.userAnswers) {
+      const partName = userAnswer.question.questionGroup.part.name;
+      const answerResponse: UserAnswerOverallResponse = {
+        userAnswerId: userAnswer.id,
+        position: userAnswer.question.position,
+        correctAnswer: userAnswer.question.correctOption,
+        userAnswer: userAnswer.answer || ''
+      };
+
+      if (!result[partName]) {
+        result[partName] = [];
+      }
+      result[partName].push(answerResponse);
+    }
+
+    return result;
   }
 }
