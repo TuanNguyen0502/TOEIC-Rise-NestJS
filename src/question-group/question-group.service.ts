@@ -65,11 +65,13 @@ export class QuestionGroupService {
     }
   }
 
-  async findAllByIdInFetchQuestions(ids: number[]) {
-    const qg = await this.questionGroupRepo.find({
-      where: { id: In(ids) },
-      relations: ['questions'],
-    });
+  async findAllByIdInFetchQuestions(ids: number[]): Promise<QuestionGroup[]> {
+    const qg = await this.questionGroupRepo
+      .createQueryBuilder('qg')
+      .leftJoinAndSelect('qg.part', 'part') // <- đảm bảo part được load
+      .leftJoinAndSelect('qg.questions', 'questions')
+      .where('qg.id IN (:...ids)', { ids })
+      .getMany();
     return qg;
   }
 

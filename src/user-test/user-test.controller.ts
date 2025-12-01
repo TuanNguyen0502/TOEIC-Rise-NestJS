@@ -5,6 +5,8 @@ import {
   ParseIntPipe,
   UseGuards,
   Query,
+  Post,
+  Body,
 } from '@nestjs/common';
 import { LearnerTestHistoryResponse } from './dto/learner-test-history-response.dto';
 import { TestResultResponseDto } from './dto/test-result-response.dto';
@@ -12,6 +14,8 @@ import { UserTestService } from './user-test.service';
 import { GetCurrentUserEmail } from 'src/common/utils/decorators/get-current-user.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { UserTestRequest } from './dto/user-test-request.dto';
+import { TestResultOverallResponse } from 'src/test/dto/test-result-overall-response.dto';
 
 @ApiTags('learner/user-tests')
 @ApiBearerAuth('JWT')
@@ -61,6 +65,17 @@ export class UserTestController {
     @Param('userTestId', ParseIntPipe) userTestId: number,
     @GetCurrentUserEmail() email: string,
   ): Promise<Record<string, any[]>> {
-    return await this.userTestService.getUserAnswersGroupedByPart(email, userTestId);
+    return await this.userTestService.getUserAnswersGroupedByPart(
+      email,
+      userTestId,
+    );
+  }
+
+  @Post()
+  async submitTest(
+    @Body() request: UserTestRequest,
+    @GetCurrentUserEmail() email: string,
+  ): Promise<TestResultOverallResponse> {
+    return this.userTestService.calculateAndSaveUserTestResult(email, request);
   }
 }

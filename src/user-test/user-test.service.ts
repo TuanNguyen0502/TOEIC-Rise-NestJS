@@ -261,7 +261,10 @@ export class UserTestService {
       totalQuestions: request.answers.length,
       timeSpent: request.timeSpent,
       parts: request.parts ?? [],
+      userAnswers: [],
     });
+
+    await this.userTestRepository.save(userTest);
 
     if (!request.parts || request.parts.length === 0) {
       await this.calculateExamScore(userTest, request.answers);
@@ -469,7 +472,7 @@ export class UserTestService {
   ): Promise<LearnerTestPartsResponse> {
     // Find test by ID and status APPROVED
     const test = await this.testRepository.findOne({
-      where: { id: testId, status: ETestStatus.APPROVED }
+      where: { id: testId, status: ETestStatus.APPROVED },
     });
 
     if (!test) {
@@ -482,32 +485,44 @@ export class UserTestService {
         testId,
         parts,
       );
-    
+
     // Map to response format
-    const partResponses: LearnerTestPartResponse[] = partGroupData.map(({ part, groups }) => {
-      const questionGroupResponses = groups
-        .sort((a, b) => a.position - b.position)
-        .map(group => {
-          const questionResponses: LearnerTestQuestionResponse[] = group.questions
-            .sort((a, b) => a.position - b.position)
-            .map(question => this.questionMapper.toLearnerTestQuestionResponse(question));
-          
-          const groupResponse = this.questionGroupMapper.toLearnerTestQuestionGroupResponse(group);
-          groupResponse.questions = questionResponses;
-          return groupResponse;
-        });
+    const partResponses: LearnerTestPartResponse[] = partGroupData
+      .map(({ part, groups }) => {
+        const questionGroupResponses = groups
+          .sort((a, b) => a.position - b.position)
+          .map((group) => {
+            const questionResponses: LearnerTestQuestionResponse[] =
+              group.questions
+                .sort((a, b) => a.position - b.position)
+                .map((question) =>
+                  this.questionMapper.toLearnerTestQuestionResponse(question),
+                );
 
-      const partResponse = this.partMapper.toLearnerTestPartResponse(part);
-      partResponse.questionGroups = questionGroupResponses;
-      return partResponse;
-    }).sort((a, b) => a.partName.localeCompare(b.partName));
+            const groupResponse =
+              this.questionGroupMapper.toLearnerTestQuestionGroupResponse(
+                group,
+              );
+            groupResponse.questions = questionResponses;
+            return groupResponse;
+          });
 
-    const learnerTestPartsResponse = this.testMapper.toLearnerTestPartsResponse(test);
+        const partResponse = this.partMapper.toLearnerTestPartResponse(part);
+        partResponse.questionGroups = questionGroupResponses;
+        return partResponse;
+      })
+      .sort((a, b) => a.partName.localeCompare(b.partName));
+
+    const learnerTestPartsResponse =
+      this.testMapper.toLearnerTestPartsResponse(test);
     learnerTestPartsResponse.partResponses = partResponses;
     return learnerTestPartsResponse;
   }
 
-  async getUserAnswersGroupedByPart(email: string, userTestId: number): Promise<Record<string, UserAnswerOverallResponse[]>> {
+  async getUserAnswersGroupedByPart(
+    email: string,
+    userTestId: number,
+  ): Promise<Record<string, UserAnswerOverallResponse[]>> {
     // Find user test with answers and questions
     const userTest = await this.userTestRepository.findOne({
       where: { id: userTestId },
@@ -517,8 +532,8 @@ export class UserTestService {
         'userAnswers',
         'userAnswers.question',
         'userAnswers.question.questionGroup',
-        'userAnswers.question.questionGroup.part'
-      ]
+        'userAnswers.question.questionGroup.part',
+      ],
     });
 
     if (!userTest) {
@@ -538,7 +553,7 @@ export class UserTestService {
         userAnswerId: userAnswer.id,
         position: userAnswer.question.position,
         correctAnswer: userAnswer.question.correctOption,
-        userAnswer: userAnswer.answer || ''
+        userAnswer: userAnswer.answer || '',
       };
 
       if (!result[partName]) {

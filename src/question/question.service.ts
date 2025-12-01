@@ -118,6 +118,7 @@ export class QuestionService {
 
     return this.questionRepository.find({
       where: { id: In(questionIds) },
+      relations: ['questionGroup', 'questionGroup.part'],
     });
   }
 }
