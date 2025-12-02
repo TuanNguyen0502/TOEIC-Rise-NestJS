@@ -5,5 +5,5 @@ export class UserAnswerGroupedByTagResponseDto {
   correctAnswers: number;
   wrongAnswers: number;
   correctPercent: number;
-  userAnswerOverallResponses?: UserAnswerOverallResponseDto[];
+  userAnswerOverallResponses: UserAnswerOverallResponseDto[] | null;
 }

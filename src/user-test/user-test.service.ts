@@ -34,7 +34,7 @@ import { QuestionMapper } from 'src/question/mapper/question.mapper';
 import { LearnerTestQuestionResponse } from './dto/learner-test-question-response.dto';
 import { LearnerTestPartsResponse } from './dto/learner-test-parts-response.dto';
 import { ETestStatus } from 'src/enums/ETestStatus.enum';
-import { UserAnswerOverallResponse } from './dto/user-answer-overall-response.dto';
+import { UserAnswerOverallResponse, UserAnswerOverallResponseDto } from './dto/user-answer-overall-response.dto';
 
 type LearnerTestHistoryRawRow = {
   id: number | string;
@@ -107,11 +107,9 @@ export class UserTestService {
     );
   }
 
-  async getUserTestResultById(
-    email: string,
-    userTestId: number,
-  ): Promise<TestResultResponseDto> {
-    // 1. Fetch UserTest with deep relations to traverse: Answer -> Question -> Group -> Part
+  async getUserTestResultById(email: string, userTestId: number): Promise<TestResultResponseDto> {
+    // 1. Fetch UserTest cùng với các quan hệ (tương đương findByIdWithAnswersAndQuestions)
+    // Chúng ta join sâu vào Question -> QuestionGroup -> Part để lấy tên Part luôn
     const userTest = await this.userTestRepository.findOne({
       where: { id: userTestId },
       relations: [
@@ -122,117 +120,147 @@ export class UserTestService {
         'userAnswers.question',
         'userAnswers.question.tags',
         'userAnswers.question.questionGroup',
-        'userAnswers.question.questionGroup.part',
+        'userAnswers.question.questionGroup.part' 
       ],
     });
 
     if (!userTest) {
-      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'UserTest');
+      throw new NotFoundException('UserTest not found');
     }
 
-    // 2. Security Check
+    // 2. Verify user email (Java: check account email)
     if (userTest.user.account.email !== email) {
-      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test Result');
+      throw new NotFoundException('Test Result not found for this user');
     }
 
+    // 3. Chuẩn bị cấu trúc dữ liệu trả về
     const userAnswers = userTest.userAnswers;
-    const userAnswersByPart: Record<
-      string,
-      UserAnswerGroupedByTagResponseDto[]
-    > = {};
+    const userAnswersByPart: Record<string, UserAnswerGroupedByTagResponseDto[]> = {};
 
-    // 3. Group answers by Part Name
-    const answersByPartMap = new Map<string, UserAnswer[]>();
-
-    for (const answer of userAnswers) {
-      const partName = answer.question.questionGroup.part.name; // Direct access via relations
-      if (!answersByPartMap.has(partName)) {
-        answersByPartMap.set(partName, []);
+    // 4. Group user answers by Part Name
+    // Trong JS, ta dùng reduce để gom nhóm thay vì Stream.collect(groupingBy)
+    const answersByPart = userAnswers.reduce((acc, ua) => {
+      // Lấy tên part từ relation đã join
+      const partName = ua.question.questionGroup.part.name;
+      if (!acc[partName]) {
+        acc[partName] = [];
       }
-      answersByPartMap.get(partName)!.push(answer);
-    }
+      acc[partName].push(ua);
+      return acc;
+    }, {} as Record<string, typeof userAnswers>);
 
-    // 4. Process each Part
-    for (const [partName, answersInPart] of answersByPartMap.entries()) {
-      const groupedResponses: UserAnswerGroupedByTagResponseDto[] = [];
+    // 5. Process từng Part
+    for (const [partName, answersInPart] of Object.entries(answersByPart)) {
+      
+      // 5a. Flatten và Group by Tag Name bên trong Part
+      // Logic: Một câu hỏi có thể có nhiều tag, ta cần tách ra từng entry (tagName, answer)
+      const answersByTag: Record<string, typeof userAnswers> = {};
 
-      // 4a. Group by Tag within the Part
-      const answersByTagMap = new Map<string, UserAnswer[]>();
-
-      for (const answer of answersInPart) {
-        const tags = answer.question.tags;
-        if (tags) {
-          for (const tag of tags) {
-            if (!answersByTagMap.has(tag.name)) {
-              answersByTagMap.set(tag.name, []);
-            }
-            answersByTagMap.get(tag.name)!.push(answer);
+      for (const ua of answersInPart) {
+        const tags = ua.question.tags || [];
+        for (const tag of tags) {
+          if (!answersByTag[tag.name]) {
+            answersByTag[tag.name] = [];
           }
+          answersByTag[tag.name].push(ua);
         }
       }
 
-      // 4b. Calculate stats for each Tag
-      for (const [tagName, answersForTag] of answersByTagMap.entries()) {
-        const correctCount = answersForTag.filter((a) => a.isCorrect).length;
-        const totalCount = answersForTag.length;
-        const wrongCount = totalCount - correctCount;
-        const correctPercent =
-          totalCount === 0 ? 0 : (correctCount / totalCount) * 100;
+      // 5b. Tính toán thống kê cho từng Tag
+      const groupedResponses: UserAnswerGroupedByTagResponseDto[] = [];
+
+      for (const [tagName, answersForTag] of Object.entries(answersByTag)) {
+        const correctAnswersCount = answersForTag.filter(ua => ua.isCorrect).length;
+        const wrongAnswersCount = answersForTag.length - correctAnswersCount;
+        const correctPercent = answersForTag.length === 0 
+          ? 0.0 
+          : (correctAnswersCount / answersForTag.length) * 100;
+
+        // Map sang DTO chi tiết
+        const userAnswerOverallResponses: UserAnswerOverallResponseDto[] = answersForTag.map(ua => ({
+          userAnswerId: ua.id,
+          position: ua.question.position,
+          isCorrect: ua.question.correctOption === ua.answer // Logic từ Mapper
+        }));
 
         groupedResponses.push({
           tag: tagName,
-          correctAnswers: correctCount,
-          wrongAnswers: wrongCount,
-          correctPercent: parseFloat(correctPercent.toFixed(2)), // Clean formatting
-          userAnswerOverallResponses: answersForTag.map((a) => ({
-            questionId: a.question.id,
-            userAnswer: a.answer ?? null,
-            isCorrect: a.isCorrect,
-            correctOption: a.question.correctOption,
-          })),
+          correctAnswers: correctAnswersCount,
+          wrongAnswers: wrongAnswersCount,
+          correctPercent: correctPercent,
+          userAnswerOverallResponses: userAnswerOverallResponses
         });
       }
 
-      // 4c. Add "Total" summary for the Part
-      const totalCorrectPart = answersInPart.filter((a) => a.isCorrect).length;
-      const totalQuestionsPart = answersInPart.length;
-      const totalWrongPart = totalQuestionsPart - totalCorrectPart;
-      const totalPercentPart =
-        totalQuestionsPart === 0
-          ? 0
-          : (totalCorrectPart / totalQuestionsPart) * 100;
+      // 5c. Tính toán tổng quan cho Part (Total summary)
+      const totalCorrect = answersInPart.filter(ua => ua.isCorrect).length;
+      const totalQuestions = answersInPart.length;
+      const totalWrong = totalQuestions - totalCorrect;
+      const totalPercent = totalQuestions === 0 
+        ? 0.0 
+        : (totalCorrect / totalQuestions) * 100;
 
+      // Thêm phần tổng kết vào cuối danh sách
       groupedResponses.push({
         tag: 'Total',
-        correctAnswers: totalCorrectPart,
-        wrongAnswers: totalWrongPart,
-        correctPercent: parseFloat(totalPercentPart.toFixed(2)),
-        userAnswerOverallResponses: undefined, // Java sets this to null for Total
+        correctAnswers: totalCorrect,
+        wrongAnswers: totalWrong,
+        correctPercent: totalPercent,
+        userAnswerOverallResponses: null
       });
 
-      // Assign to result map
+      // Gán vào kết quả cuối cùng
       userAnswersByPart[partName] = groupedResponses;
     }
 
-    // 5. Construct Final Response
-    return {
-      id: userTest.id,
+    // 6. Map UserTest sang Response (Tương đương userTestMapper.toTestResultResponse)
+    return this.mapToTestResultResponse(userTest, userAnswersByPart);
+  }
+
+  private mapToTestResultResponse(
+    userTest: UserTest, 
+    userAnswersByPart: Record<string, UserAnswerGroupedByTagResponseDto[]>
+  ): TestResultResponseDto {
+    
+    // Xử lý parts: TypeORM có thể trả về string hoặc array tùy vào config cột
+    let partsData: string[] | null = null;
+    if (userTest.parts) {
+        if (typeof userTest.parts === 'string') {
+            try {
+                partsData = JSON.parse(userTest.parts);
+            } catch (e) {
+                // Fallback nếu chuỗi không phải JSON (ví dụ: "Part 1,Part 2")
+                partsData = (userTest.parts as string).split(','); 
+            }
+        } else {
+            // Nếu đã là array (do TypeORM parse sẵn)
+            partsData = userTest.parts;
+        }
+    }
+
+    const response: TestResultResponseDto = {
+      testId: userTest.test.id,
+      userTestId: userTest.id,
       testName: userTest.test.name,
-      totalScore: userTest.totalScore ?? Number.NaN,
-      readingScore: userTest.readingScore ?? Number.NaN,
-      listeningScore: userTest.listeningScore ?? Number.NaN,
-      correctAnswers: userTest.correctAnswers ?? Number.NaN,
-      totalQuestions: userTest.totalQuestions ?? Number.NaN,
-      timeSpent: userTest.timeSpent ?? Number.NaN,
-      createdAt: userTest.createdAt
-        ? formatInTimeZone(
-            userTest.createdAt,
-            TIMEZONE_VIETNAM,
-            DATE_TIME_PATTERN,
-          )
-        : null,
+      
+      parts: partsData, 
+      
+      totalQuestions: userTest.totalQuestions ?? 0,
+      correctAnswers: userTest.correctAnswers ?? 0,
+      correctPercent: userTest.correctPercent ? Number(userTest.correctPercent) : 0,
+      timeSpent: userTest.timeSpent ?? 0,
       userAnswersByPart: userAnswersByPart,
     };
+
+    if (userTest.totalScore !== null && userTest.totalScore !== undefined) {
+      response.score = userTest.totalScore;
+      response.listeningScore = userTest.listeningScore ?? 0;
+      response.listeningCorrectAnswers = userTest.listeningCorrectAnswers ?? 0;
+      response.readingScore = userTest.readingScore ?? 0;
+      response.readingCorrectAnswers = userTest.readingCorrectAnswers ?? 0;
+    }
+
+    return response;
   }
 
   async calculateAndSaveUserTestResult(
