@@ -5,6 +5,7 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { GetCurrentUserEmail } from 'src/common/utils/decorators/get-current-user.decorator';
 import { PageResponse } from 'src/test-set/dto/page-response.dto';
 import { TestHistoryResponse } from './dto/test-history-response.dto';
+import { FullTestResultResponse } from './dto/full-test-result-response.dto';
 
 @ApiTags('learner/analysis')
 @ApiBearerAuth('JWT')
@@ -20,5 +21,13 @@ export class AnalysisController {
     @GetCurrentUserEmail() email: string,
   ): Promise<PageResponse<TestHistoryResponse[]>> {
     return this.analysisService.getAllTestHistory(page, size, email);
+  }
+
+  @Get('full-test')
+  async getFullTestResult(
+    @Query('size') size: number = 5,
+    @GetCurrentUserEmail() email: string,
+  ): Promise<FullTestResultResponse> {
+    return this.analysisService.getFullTestResult(email, size);
   }
 }

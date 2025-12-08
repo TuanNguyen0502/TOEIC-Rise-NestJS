@@ -4,10 +4,15 @@ import { Repository } from 'typeorm';
 import { UserTest } from 'src/entities/user-test.entity';
 import { ETestStatus } from 'src/enums/ETestStatus.enum';
 import { TestHistoryResponse } from './dto/test-history-response.dto';
+import { FullTestResultResponse } from './dto/full-test-result-response.dto';
+import { ExamTypeFullTestResponse } from './dto/exam-type-full-test-response.dto';
 import { PageResponse, PageMeta } from 'src/test-set/dto/page-response.dto';
 import { IAnalysisService } from './analysis.service.interface';
 import { formatInTimeZone } from 'date-fns-tz';
-import { TIMEZONE_VIETNAM } from 'src/common/constants/constants';
+import {
+  DATE_TIME_PATTERN,
+  TIMEZONE_VIETNAM,
+} from 'src/common/constants/constants';
 
 type AnalysisRawRow = {
   id: string | number;
@@ -112,7 +117,97 @@ export class AnalysisService implements IAnalysisService {
     };
   }
 
-  async getDailyAnalysis(): Promise<void> {}
+  async getFullTestResult(
+    email: string,
+    size: number,
+  ): Promise<FullTestResultResponse> {
+    // Limit size to max 10
+    if (size > 10) {
+      size = 10;
+    }
 
-  async getFullTestResult(): Promise<void> {}
+    // Find user tests with totalScore not null, ordered by createdAt DESC
+    const userTests = await this.userTestRepository
+      .createQueryBuilder('ut')
+      .innerJoin('ut.user', 'u')
+      .innerJoin('u.account', 'a')
+      .innerJoin('ut.test', 't')
+      .where('a.email = :email', { email })
+      .andWhere('ut.totalScore IS NOT NULL')
+      .andWhere('t.status = :status', { status: ETestStatus.APPROVED })
+      .select([
+        'ut.id',
+        'ut.createdAt',
+        'ut.totalScore',
+        'ut.listeningScore',
+        'ut.readingScore',
+        't.id',
+        't.name',
+      ])
+      .orderBy('ut.createdAt', 'DESC')
+      .limit(size)
+      .getMany();
+
+    const scores: number[] = [];
+    const listeningScores: number[] = [];
+    const readingScores: number[] = [];
+    const examTypeFullTestResponses: ExamTypeFullTestResponse[] = [];
+
+    for (const ut of userTests) {
+      if (ut.totalScore) scores.push(ut.totalScore);
+      if (ut.listeningScore) listeningScores.push(ut.listeningScore);
+      if (ut.readingScore) readingScores.push(ut.readingScore);
+
+      examTypeFullTestResponses.push({
+        id: ut.id,
+        name: ut.test.name,
+        createdAt: formatInTimeZone(
+          ut.createdAt,
+          TIMEZONE_VIETNAM,
+          DATE_TIME_PATTERN,
+        ),
+        listeningScore: ut.listeningScore || 0,
+        readingScore: ut.readingScore || 0,
+        totalScore: ut.totalScore || 0,
+      });
+    }
+
+    // Calculate averages and max values
+    const averageScore = scores.length
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+    const highestScore = scores.length ? Math.max(...scores) : 0;
+    const averageListeningScore = listeningScores.length
+      ? Math.round(
+          listeningScores.reduce((a, b) => a + b, 0) / listeningScores.length,
+        )
+      : 0;
+    const averageReadingScore = readingScores.length
+      ? Math.round(
+          readingScores.reduce((a, b) => a + b, 0) / readingScores.length,
+        )
+      : 0;
+    const maxListeningScore = listeningScores.length
+      ? Math.max(...listeningScores)
+      : 0;
+    const maxReadingScore = readingScores.length
+      ? Math.max(...readingScores)
+      : 0;
+
+    return {
+      averageScore: this.roundToNearest5(averageScore),
+      highestScore,
+      averageListeningScore: this.roundToNearest5(averageListeningScore),
+      averageReadingScore: this.roundToNearest5(averageReadingScore),
+      maxListeningScore,
+      maxReadingScore,
+      examTypeFullTestResponses,
+    };
+  }
+
+  private roundToNearest5(number: number): number {
+    return Math.round(number / 5) * 5;
+  }
+
+  async getDailyAnalysis(): Promise<void> {}
 }
