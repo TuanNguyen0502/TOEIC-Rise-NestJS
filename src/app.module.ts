@@ -16,6 +16,7 @@ import { QuestionModule } from './question/question.module';
 import { TestSetModule } from './test-set/test-set.module';
 import { UserTestModule } from './user-test/user-test.module';
 import { UserAnswersModule } from './user-answer/user-answers.module';
+import { AnalysisModule } from './analysis/analysis.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { UserAnswersModule } from './user-answer/user-answers.module';
     TestSetModule,
     UserTestModule,
     UserAnswersModule,
+    AnalysisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
