@@ -124,4 +124,20 @@ export class QuestionGroupService {
 
     return questionGroup.part.name;
   }
+
+  async getPartNamesByQuestionGroupIds(
+    questionGroupIds: number[],
+  ): Promise<Map<number, string>> {
+    const questionGroups = await this.questionGroupRepo.find({
+      where: { id: In(questionGroupIds) },
+      relations: ['part'],
+    });
+
+    const map = new Map<number, string>();
+    for (const group of questionGroups) {
+      map.set(group.id, group.part.name);
+    }
+
+    return map;
+  }
 }

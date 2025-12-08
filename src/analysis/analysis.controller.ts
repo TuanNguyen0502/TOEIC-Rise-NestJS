@@ -6,6 +6,8 @@ import { GetCurrentUserEmail } from 'src/common/utils/decorators/get-current-use
 import { PageResponse } from 'src/test-set/dto/page-response.dto';
 import { TestHistoryResponse } from './dto/test-history-response.dto';
 import { FullTestResultResponse } from './dto/full-test-result-response.dto';
+import { AnalysisResultResponse } from './dto/analysis-result-response.dto';
+import { EDays } from 'src/enums/EDays.enum';
 
 @ApiTags('learner/analysis')
 @ApiBearerAuth('JWT')
@@ -13,6 +15,14 @@ import { FullTestResultResponse } from './dto/full-test-result-response.dto';
 @UseGuards(JwtAuthGuard)
 export class AnalysisController {
   constructor(private readonly analysisService: AnalysisService) {}
+
+  @Get()
+  async getAnalysisResult(
+    @Query('days') days: EDays = EDays.ONE_MONTH,
+    @GetCurrentUserEmail() email: string,
+  ): Promise<AnalysisResultResponse> {
+    return this.analysisService.getAnalysisResult(email, days);
+  }
 
   @Get('result')
   async getAllTestHistory(
