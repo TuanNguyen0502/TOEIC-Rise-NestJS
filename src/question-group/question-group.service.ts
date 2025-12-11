@@ -82,7 +82,7 @@ export class QuestionGroupService {
   async getQuestionGroupsByTestIdGroupByParts(
     testId: number,
     partIds: number[],
-  ) {
+  ): Promise<Array<{ part: Part; groups: QuestionGroup[] }>> {
     // Find question groups for the test and specified parts
     const questionGroups = await this.questionGroupRepo.find({
       where: {
@@ -97,13 +97,16 @@ export class QuestionGroupService {
     });
 
     // Group by Part
-    const groupedByPart = new Map();
+    const groupedByPart = new Map<
+      number,
+      { part: Part; groups: QuestionGroup[] }
+    >();
     questionGroups.forEach((group) => {
       const part = group.part;
       if (!groupedByPart.has(part.id)) {
         groupedByPart.set(part.id, { part, groups: [] });
       }
-      groupedByPart.get(part.id).groups.push(group);
+      groupedByPart.get(part.id)!.groups.push(group);
     });
 
     return Array.from(groupedByPart.values());
