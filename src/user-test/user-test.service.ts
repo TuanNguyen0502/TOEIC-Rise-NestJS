@@ -15,7 +15,6 @@ import { QuestionGroupService } from 'src/question-group/question-group.service'
 import { TestExcelMapper } from 'src/test/mapper/test.mapper';
 import { PartMapper } from 'src/part/mapper/part.mapper';
 import { QuestionGroupMapper } from 'src/question-group/mapper/question-group.mapper';
-import { UserAnswerMapper } from 'src/user-answer/mapper/user-answer.mapper';
 import { LearnerTestPartResponse } from './dto/learner-test-part-response.dto';
 import { QuestionMapper } from 'src/question/mapper/question.mapper';
 import { LearnerTestQuestionResponse } from './dto/learner-test-question-response.dto';
@@ -24,6 +23,12 @@ import { ETestStatus } from 'src/enums/ETestStatus.enum';
 import { UserAnswerOverallResponse } from './dto/user-answer-overall-response.dto';
 import { QuestionGroup } from 'src/entities/question-group.entity';
 import { Part } from 'src/entities/part.entity';
+import { UserAnswer } from 'src/entities/user-answer.entity';
+import { UserAnswerMapper } from 'src/user-answer/mapper/user-answer.mapper';
+import { LearnerAnswerResponse } from './dto/learner-answer-response.dto';
+import { TestResultResponseDto } from './dto/test-result-response.dto';
+import { UserAnswerGroupedByTagResponseDto } from './dto/user-answer-grouped-by-tag-response.dto';
+import { UserTestMapper } from './mapper/user-test.mapper';
 
 type LearnerTestHistoryRawRow = {
   id: number | string;
@@ -46,8 +51,9 @@ export class UserTestService {
     private readonly testMapper: TestExcelMapper,
     private readonly partMapper: PartMapper,
     private readonly questionGroupMapper: QuestionGroupMapper,
-    private readonly userAnswerMapper: UserAnswerMapper,
     private readonly questionMapper: QuestionMapper,
+    private readonly userAnswerMapper: UserAnswerMapper,
+    private readonly userTestMapper: UserTestMapper,
   ) {}
 
   async allLearnerTestHistories(
@@ -188,5 +194,198 @@ export class UserTestService {
     }
 
     return result;
+  }
+
+  async getUserTestDetail(
+    userTestId: number,
+    email: string,
+  ): Promise<LearnerTestPartsResponse> {
+    const userTest = await this.userTestRepository.findOne({
+      relations: [
+        'test',
+        'userAnswers',
+        'userAnswers.question',
+        'userAnswers.question.questionGroup',
+        'userAnswers.question.questionGroup.part',
+      ],
+      where: { id: userTestId, user: { account: { email: email } } },
+    });
+    if (!userTest)
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User test');
+
+    const learnerTestPartsResponse = this.testMapper.toLearnerTestPartsResponse(
+      userTest.test,
+    );
+
+    const answerByPart = [...userTest.userAnswers].reduce((acc, ua) => {
+      const part = ua.question.questionGroup.part;
+      if (!acc.has(part)) acc.set(part, []);
+      acc.get(part)!.push(ua);
+      return acc;
+    }, new Map<Part, UserAnswer[]>());
+
+    const partResponses = [...answerByPart.entries()]
+      .map(([part, answers]) => {
+        const answerByQuestionGroups = answers.reduce((acc, ua) => {
+          const qg = ua.question.questionGroup;
+          if (!acc.has(qg)) acc.set(qg, []);
+          acc.get(qg)!.push(ua);
+          return acc;
+        }, new Map<QuestionGroup, UserAnswer[]>());
+
+        const questionGroupResponses = [...answerByQuestionGroups.entries()]
+          .sort((a, b) => a[0].position - b[0].position)
+          .map(([questionGroup, userAnswers]) => {
+            const questionAndAnswers: LearnerAnswerResponse[] = [...userAnswers]
+              .sort((a, b) => a.question.position - b.question.position)
+              .map((ua) => this.userAnswerMapper.toLearnerAnswerResponse(ua));
+
+            const qgResponse =
+              this.questionGroupMapper.toLearnerTestQuestionGroupResponse(
+                questionGroup,
+              );
+            qgResponse.questions = questionAndAnswers;
+            return qgResponse;
+          });
+
+        const partResponse = this.partMapper.toLearnerTestPartResponse(part);
+        partResponse.questionGroups = questionGroupResponses;
+        return partResponse;
+      })
+      .sort((a, b) => a.partName.localeCompare(b.partName));
+
+    learnerTestPartsResponse.partResponses = partResponses;
+    return learnerTestPartsResponse;
+  }
+
+  async getUserTestResultById(
+    email: string,
+    userTestId: number,
+  ): Promise<TestResultResponseDto> {
+    const userTest = await this.userTestRepository.findOne({
+      relations: [
+        'test',
+        'user',
+        'user.account',
+        'userAnswers',
+        'userAnswers.question',
+        'userAnswers.question.tags',
+        'userAnswers.question.questionGroup',
+        'userAnswers.question.questionGroup.part',
+      ],
+      where: { id: userTestId },
+    });
+
+    if (!userTest)
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'UserTest');
+
+    if (userTest.user.account.email !== email) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test Result');
+    }
+
+    const userAnswers = userTest.userAnswers ?? [];
+    // Fallback to relation-based group id in case questionGroupId column is null/not populated
+    const questionGroupIds = userAnswers.map(
+      (ua) => ua.questionGroupId ?? ua.question?.questionGroup?.id,
+    );
+    // Lọc bỏ null/undefined và tạo Set
+    const validQuestionGroupIds = new Set<number>(
+      questionGroupIds.filter(
+        (id): id is number => id !== null && id !== undefined,
+      ),
+    );
+    let partNamesByGroupId = new Map<number, string>();
+
+    if (validQuestionGroupIds.size > 0) {
+      partNamesByGroupId =
+        await this.questionGroupService.getPartNamesByQuestionGroupIds(
+          validQuestionGroupIds,
+        );
+    }
+    partNamesByGroupId =
+      await this.questionGroupService.getPartNamesByQuestionGroupIds(
+        validQuestionGroupIds,
+      );
+
+    // group answers by part name
+    const answersByPart = new Map<string, any[]>();
+    for (const ua of userAnswers) {
+      const groupId = ua.questionGroupId ?? ua.question?.questionGroup?.id;
+      if (!groupId) continue;
+      const partName = partNamesByGroupId.get(groupId);
+      const finalPartName = partName ?? 'Unknown';
+      if (!answersByPart.has(finalPartName)) {
+        answersByPart.set(finalPartName, []);
+      }
+      answersByPart.get(finalPartName)!.push(ua);
+    }
+
+    const userAnswersByPart: Record<
+      string,
+      UserAnswerGroupedByTagResponseDto[]
+    > = {};
+
+    for (const [partName, answersInPart] of answersByPart.entries()) {
+      // group by tag name
+      const answersByTag = answersInPart.reduce<Map<string, UserAnswer[]>>(
+        (acc, ua: UserAnswer) => {
+          for (const tag of ua.question.tags) {
+            const tagName = tag.name;
+            if (!acc.has(tagName)) acc.set(tagName, []);
+            acc.get(tagName)!.push(ua);
+          }
+          return acc;
+        },
+        new Map(),
+      );
+
+      const groupedResponses: UserAnswerGroupedByTagResponseDto[] = [];
+
+      for (const [tagName, answersForTag] of answersByTag.entries()) {
+        const correctAnswers = answersForTag.filter(
+          (ua) => ua.isCorrect,
+        ).length;
+        const wrongAnswers = answersForTag.length - correctAnswers;
+        const correctPercent =
+          answersForTag.length === 0
+            ? 0
+            : (correctAnswers / answersForTag.length) * 100;
+        const userAnswerOverallResponses = answersForTag.map((ua) =>
+          this.userAnswerMapper.toUserAnswerGroupedByTagResponse(ua),
+        );
+
+        groupedResponses.push({
+          tag: tagName,
+          correctAnswers,
+          wrongAnswers,
+          correctPercent,
+          userAnswerOverallResponses,
+        });
+      }
+
+      // totals per part
+      const totalCorrect = answersInPart.filter(
+        (ua: UserAnswer) => ua.isCorrect,
+      ).length;
+      const totalQuestions = answersInPart.length;
+      const totalWrong = totalQuestions - totalCorrect;
+      const totalPercent =
+        totalQuestions === 0 ? 0 : (totalCorrect / totalQuestions) * 100;
+
+      groupedResponses.push({
+        tag: 'Total',
+        correctAnswers: totalCorrect,
+        wrongAnswers: totalWrong,
+        correctPercent: totalPercent,
+        userAnswerOverallResponses: null,
+      });
+
+      userAnswersByPart[partName] = groupedResponses;
+    }
+
+    return this.userTestMapper.toTestResultResponse(
+      userTest,
+      userAnswersByPart,
+    );
   }
 }

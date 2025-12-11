@@ -83,12 +83,14 @@ export class QuestionGroupService {
     testId: number,
     partIds: number[],
   ): Promise<Array<{ part: Part; groups: QuestionGroup[] }>> {
-    // Find question groups for the test and specified parts
+    // If no parts filter is provided, load all parts of the test
+    const whereClause =
+      partIds && partIds.length > 0
+        ? { test: { id: testId }, part: { id: In(partIds) } }
+        : { test: { id: testId } };
+
     const questionGroups = await this.questionGroupRepo.find({
-      where: {
-        test: { id: testId },
-        part: { id: In(partIds) },
-      },
+      where: whereClause,
       relations: ['part', 'questions', 'questions.tags'],
       order: {
         position: 'ASC',
@@ -129,18 +131,13 @@ export class QuestionGroupService {
   }
 
   async getPartNamesByQuestionGroupIds(
-    questionGroupIds: number[],
+    questionGroupIds: Set<number>,
   ): Promise<Map<number, string>> {
-    const questionGroups = await this.questionGroupRepo.find({
-      where: { id: In(questionGroupIds) },
+    const groups = await this.questionGroupRepo.find({
+      where: { id: In([...questionGroupIds]) },
       relations: ['part'],
+      select: ['id'],
     });
-
-    const map = new Map<number, string>();
-    for (const group of questionGroups) {
-      map.set(group.id, group.part.name);
-    }
-
-    return map;
+    return new Map(groups.map((qg) => [qg.id, qg.part.name]));
   }
 }

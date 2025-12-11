@@ -3,6 +3,7 @@ import { UserAnswer } from 'src/entities/user-answer.entity';
 import { QuestionGroup } from 'src/entities/question-group.entity';
 import { UserAnswerDetailResponse } from 'src/user-test/dto/user-answer-detail-response.dto';
 import { LearnerAnswerResponse } from 'src/user-test/dto/learner-answer-response.dto';
+import { UserAnswerGroupedByTagResponseDto } from 'src/user-test/dto/user-answer-grouped-by-tag-response.dto';
 
 @Injectable()
 export class UserAnswerMapper {
@@ -47,6 +48,19 @@ export class UserAnswerMapper {
       explanation: ua.question.explanation ?? '',
       userAnswer: ua.answer ?? '',
       isCorrect: ua.isCorrect,
+    };
+  }
+
+  toUserAnswerGroupedByTagResponse(
+    userAnswer: UserAnswer,
+  ): NonNullable<
+    UserAnswerGroupedByTagResponseDto['userAnswerOverallResponses']
+  >[number] {
+    const q = userAnswer.question;
+    return {
+      userAnswerId: userAnswer.id,
+      position: q.position,
+      isCorrect: q.correctOption === userAnswer.answer,
     };
   }
 }

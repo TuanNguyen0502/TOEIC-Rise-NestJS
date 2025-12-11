@@ -296,7 +296,7 @@ export class AnalysisService implements IAnalysisService {
       // Get part names for question groups
       const partNamesByGroupId =
         await this.questionGroupService.getPartNamesByQuestionGroupIds(
-          questionGroupIds,
+          new Set(questionGroupIds),
         );
 
       // Group answers by part

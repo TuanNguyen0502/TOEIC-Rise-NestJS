@@ -1,5 +1,3 @@
-// test-excel.mapper.ts
-
 import { Test } from 'src/entities/test.entity';
 import { QuestionExcelRequestDto } from '../dto/question-excel-request.dto';
 import { LearnerTestPartsResponse } from 'src/user-test/dto/learner-test-parts-response.dto';

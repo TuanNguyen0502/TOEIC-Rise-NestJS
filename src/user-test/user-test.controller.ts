@@ -11,6 +11,7 @@ import { UserTestService } from './user-test.service';
 import { GetCurrentUserEmail } from 'src/common/utils/decorators/get-current-user.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { TestResultResponseDto } from './dto/test-result-response.dto';
 
 @ApiTags('learner/user-tests')
 @ApiBearerAuth('JWT')
@@ -48,5 +49,21 @@ export class UserTestController {
       email,
       userTestId,
     );
+  }
+
+  @Get('detail/:userTestId')
+  getTestDetail(
+    @Param('userTestId', ParseIntPipe) userTestId: number,
+    @GetCurrentUserEmail('email') email: string,
+  ) {
+    return this.userTestService.getUserTestDetail(userTestId, email);
+  }
+
+  @Get(':userTestId')
+  async getUserTestResultById(
+    @Param('userTestId', ParseIntPipe) userTestId: number,
+    @GetCurrentUserEmail('email') email: string,
+  ): Promise<TestResultResponseDto> {
+    return this.userTestService.getUserTestResultById(email, userTestId);
   }
 }
