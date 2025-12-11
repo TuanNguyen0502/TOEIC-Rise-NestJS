@@ -140,4 +140,13 @@ export class QuestionGroupService {
     });
     return new Map(groups.map((qg) => [qg.id, qg.part.name]));
   }
+
+  async findAllByIdsWithQuestions(ids: Set<number>): Promise<QuestionGroup[]> {
+    return this.questionGroupRepo
+      .createQueryBuilder('qg')
+      .leftJoinAndSelect('qg.part', 'part')
+      .leftJoinAndSelect('qg.questions', 'questions')
+      .where('qg.id IN (:...ids)', { ids: [...ids] })
+      .getMany();
+  }
 }

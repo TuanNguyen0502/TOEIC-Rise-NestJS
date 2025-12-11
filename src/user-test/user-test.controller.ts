@@ -5,6 +5,8 @@ import {
   ParseIntPipe,
   UseGuards,
   Query,
+  Post,
+  Body,
 } from '@nestjs/common';
 import { LearnerTestHistoryResponse } from './dto/learner-test-history-response.dto';
 import { UserTestService } from './user-test.service';
@@ -13,6 +15,8 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { TestResultResponseDto } from './dto/test-result-response.dto';
 import { LearnerTestPartsResponse } from './dto/learner-test-parts-response.dto';
+import { UserTestRequest } from './dto/user-test-request.dto';
+import { TestResultOverallResponse } from 'src/test/dto/test-result-overall-response.dto';
 
 @ApiTags('learner/user-tests')
 @ApiBearerAuth('JWT')
@@ -66,5 +70,13 @@ export class UserTestController {
     @GetCurrentUserEmail('email') email: string,
   ): Promise<TestResultResponseDto> {
     return this.userTestService.getUserTestResultById(email, userTestId);
+  }
+
+  @Post()
+  async submitTest(
+    @Body() request: UserTestRequest,
+    @GetCurrentUserEmail('email') email: string,
+  ): Promise<TestResultOverallResponse> {
+    return this.userTestService.calculateAndSaveUserTestResult(email, request);
   }
 }

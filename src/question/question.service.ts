@@ -121,4 +121,25 @@ export class QuestionService {
       relations: ['questionGroup', 'questionGroup.part'],
     });
   }
+
+  async getQuestionEntitiesByIdsWithPart(
+    questionIds: number[],
+  ): Promise<Question[]> {
+    if (!questionIds || questionIds.length === 0) {
+      return [];
+    }
+
+    const questions = await this.questionRepository.find({
+      where: {
+        id: In(questionIds),
+      },
+      relations: ['questionGroup', 'questionGroup.part'],
+    });
+
+    if (questions.length !== questionIds.length) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+    }
+
+    return questions;
+  }
 }

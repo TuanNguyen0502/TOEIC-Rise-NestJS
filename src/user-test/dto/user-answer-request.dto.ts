@@ -1,4 +1,4 @@
-import { IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { MessageConstant } from 'src/common/constants/messages.constant';
 
 export class UserAnswerRequest {
@@ -8,5 +8,7 @@ export class UserAnswerRequest {
   @IsNotEmpty({ message: MessageConstant.QUESTION_GROUP_ID_NOT_NULL })
   questionGroupId: number;
 
+  @IsOptional()
+  @IsString()
   answer?: string;
 }

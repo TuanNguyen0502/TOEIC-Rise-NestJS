@@ -6,6 +6,8 @@ import { LearnerTestHistoryResponse } from './dto/learner-test-history-response.
 import { formatInTimeZone } from 'date-fns-tz';
 import {
   DATE_TIME_PATTERN,
+  estimatedListeningScoreMap,
+  estimatedReadingScoreMap,
   TIMEZONE_VIETNAM,
 } from 'src/common/constants/constants';
 import { AppException } from 'src/exceptions/app.exception';
@@ -28,6 +30,12 @@ import { UserAnswerMapper } from 'src/user-answer/mapper/user-answer.mapper';
 import { TestResultResponseDto } from './dto/test-result-response.dto';
 import { UserAnswerGroupedByTagResponseDto } from './dto/user-answer-grouped-by-tag-response.dto';
 import { UserTestMapper } from './mapper/user-test.mapper';
+import { UserTestRequest } from './dto/user-test-request.dto';
+import { TestResultOverallResponse } from 'src/test/dto/test-result-overall-response.dto';
+import { User } from 'src/entities/user.entity';
+import { UserAnswerRequest } from './dto/user-answer-request.dto';
+import { Question } from 'src/entities/question.entity';
+import { QuestionService } from 'src/question/question.service';
 
 type LearnerTestHistoryRawRow = {
   id: number | string;
@@ -46,7 +54,12 @@ export class UserTestService {
     private readonly userTestRepository: Repository<UserTest>,
     @InjectRepository(Test)
     private readonly testRepository: Repository<Test>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(UserAnswer)
+    private readonly userAnswerRepository: Repository<UserAnswer>,
     private readonly questionGroupService: QuestionGroupService,
+    private readonly questionService: QuestionService,
     private readonly testMapper: TestExcelMapper,
     private readonly partMapper: PartMapper,
     private readonly questionGroupMapper: QuestionGroupMapper,
@@ -299,18 +312,12 @@ export class UserTestService {
         (id): id is number => id !== null && id !== undefined,
       ),
     );
-    let partNamesByGroupId = new Map<number, string>();
-
-    if (validQuestionGroupIds.size > 0) {
-      partNamesByGroupId =
-        await this.questionGroupService.getPartNamesByQuestionGroupIds(
-          validQuestionGroupIds,
-        );
-    }
-    partNamesByGroupId =
-      await this.questionGroupService.getPartNamesByQuestionGroupIds(
-        validQuestionGroupIds,
-      );
+    const partNamesByGroupId =
+      validQuestionGroupIds.size > 0
+        ? await this.questionGroupService.getPartNamesByQuestionGroupIds(
+            validQuestionGroupIds,
+          )
+        : new Map<number, string>();
 
     // group answers by part name
     const answersByPart = new Map<string, any[]>();
@@ -392,5 +399,199 @@ export class UserTestService {
       userTest,
       userAnswersByPart,
     );
+  }
+
+  async calculateAndSaveUserTestResult(
+    email: string,
+    request: UserTestRequest,
+  ): Promise<TestResultOverallResponse> {
+    const answers: UserAnswerRequest[] = Array.isArray(request?.answers)
+      ? request.answers
+      : [];
+    const parts: string[] = Array.isArray(request?.parts) ? request.parts : [];
+    const timeSpent: number = Number(request?.timeSpent ?? 0);
+    const testId: number = Number(request?.testId);
+
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!user) throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+
+    const test = await this.testRepository.findOne({
+      where: { id: testId },
+    });
+    if (!test) throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
+
+    test.numberOfLearnerTests = (test.numberOfLearnerTests ?? 0) + 1;
+    await this.testRepository.save(test);
+
+    // Validate question groups
+    const questionGroupIds = Array.from(
+      new Set(answers.map((a) => a.questionGroupId)),
+    );
+    await this.questionGroupService.checkQuestionGroupsExistByIds(
+      questionGroupIds,
+    );
+
+    const userTest = this.userTestRepository.create({
+      user,
+      test,
+      totalQuestions: answers.length,
+      timeSpent,
+      parts,
+      userAnswers: [],
+    });
+
+    // Save userTest first to get ID
+    const savedUserTest = await this.userTestRepository.save(userTest);
+
+    if (!parts || parts.length === 0) {
+      await this.calculateExamScore(savedUserTest, answers);
+    } else {
+      await this.calculatePracticeScore(savedUserTest, answers);
+    }
+
+    // Update userTest with calculated scores
+    await this.userTestRepository.save(savedUserTest);
+    return this.userTestMapper.mapToDto(savedUserTest);
+  }
+
+  private async calculatePracticeScore(
+    userTest: UserTest,
+    answers: UserAnswerRequest[],
+  ) {
+    let correctAnswers = 0;
+    let listeningQuestion = 0;
+    let readingQuestion = 0;
+    let listeningCorrectAnswers = 0;
+    let readingCorrectAnswers = 0;
+
+    const questionIds = [...new Set(answers.map((a) => a.questionId))];
+    const questions =
+      await this.questionService.getQuestionEntitiesByIds(questionIds);
+    const questionMap = new Map<number, Question>(
+      questions.map((q) => [q.id, q]),
+    );
+
+    // Pre-allocate array to avoid repeated reallocation
+    const userAnswersToSave: UserAnswer[] = [];
+
+    for (const answer of answers) {
+      const question = questionMap.get(answer.questionId);
+      if (!question)
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+
+      const isCorrect =
+        !!answer.answer && answer.answer === question.correctOption;
+      const isListeningPart = this.questionGroupService.isListeningPart(
+        question.questionGroup.part,
+      );
+
+      if (isListeningPart) {
+        listeningQuestion++;
+        if (isCorrect) listeningCorrectAnswers++;
+      } else {
+        readingQuestion++;
+        if (isCorrect) readingCorrectAnswers++;
+      }
+      if (isCorrect) correctAnswers++;
+
+      userAnswersToSave.push(
+        this.userAnswerRepository.create({
+          userTest,
+          question,
+          questionGroupId: answer.questionGroupId,
+          answer: answer.answer,
+          isCorrect,
+        }),
+      );
+    }
+
+    // Batch save user answers instead of pushing to array
+    if (userAnswersToSave.length > 0) {
+      await this.userAnswerRepository.save(userAnswersToSave);
+      userTest.userAnswers = userAnswersToSave;
+    }
+
+    userTest.correctAnswers = correctAnswers;
+    userTest.totalListeningQuestions = listeningQuestion;
+    userTest.totalReadingQuestions = readingQuestion;
+    userTest.readingCorrectAnswers = readingCorrectAnswers;
+    userTest.listeningCorrectAnswers = listeningCorrectAnswers;
+    userTest.correctPercent = (correctAnswers / answers.length) * 100;
+  }
+
+  private async calculateExamScore(
+    userTest: UserTest,
+    answers: UserAnswerRequest[],
+  ) {
+    let correctAnswers = 0;
+    let listeningCorrect = 0;
+    let readingCorrect = 0;
+    let listeningQuestion = 0;
+    let readingQuestion = 0;
+
+    const questionIds = [...new Set(answers.map((a) => a.questionId))];
+    const questions =
+      await this.questionService.getQuestionEntitiesByIdsWithPart(questionIds);
+    const questionMap = new Map<number, Question>(
+      questions.map((q) => [q.id, q]),
+    );
+
+    // Pre-allocate array to avoid repeated reallocation
+    const userAnswersToSave: UserAnswer[] = [];
+
+    for (const answer of answers) {
+      const question = questionMap.get(answer.questionId);
+      if (!question || !question.questionGroup?.part)
+        throw new AppException(
+          ErrorCode.RESOURCE_NOT_FOUND,
+          'Question or Part relation missing',
+        );
+
+      const isCorrect =
+        !!answer.answer && answer.answer === question.correctOption;
+
+      const isListeningPart = this.questionGroupService.isListeningPart(
+        question.questionGroup.part,
+      );
+
+      if (isCorrect) {
+        correctAnswers++;
+        if (isListeningPart) listeningCorrect++;
+        else readingCorrect++;
+      }
+
+      if (isListeningPart) listeningQuestion++;
+      else readingQuestion++;
+
+      userAnswersToSave.push(
+        this.userAnswerRepository.create({
+          userTest,
+          question,
+          questionGroupId: answer.questionGroupId,
+          answer: answer.answer,
+          isCorrect,
+        }),
+      );
+    }
+
+    // Batch save user answers instead of pushing to array
+    if (userAnswersToSave.length > 0) {
+      await this.userAnswerRepository.save(userAnswersToSave);
+      userTest.userAnswers = userAnswersToSave;
+    }
+
+    userTest.correctAnswers = correctAnswers;
+    userTest.correctPercent = (correctAnswers / answers.length) * 100;
+    userTest.listeningCorrectAnswers = listeningCorrect;
+    userTest.readingCorrectAnswers = readingCorrect;
+    userTest.listeningScore = estimatedListeningScoreMap.get(listeningCorrect);
+    userTest.readingScore = estimatedReadingScoreMap.get(readingCorrect);
+    userTest.totalScore =
+      (userTest.listeningScore ?? 0) + (userTest.readingScore ?? 0);
+    userTest.totalListeningQuestions = listeningQuestion;
+    userTest.totalReadingQuestions = readingQuestion;
   }
 }
