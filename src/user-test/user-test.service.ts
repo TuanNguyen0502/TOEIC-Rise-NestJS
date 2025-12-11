@@ -25,7 +25,6 @@ import { QuestionGroup } from 'src/entities/question-group.entity';
 import { Part } from 'src/entities/part.entity';
 import { UserAnswer } from 'src/entities/user-answer.entity';
 import { UserAnswerMapper } from 'src/user-answer/mapper/user-answer.mapper';
-import { LearnerAnswerResponse } from './dto/learner-answer-response.dto';
 import { TestResultResponseDto } from './dto/test-result-response.dto';
 import { UserAnswerGroupedByTagResponseDto } from './dto/user-answer-grouped-by-tag-response.dto';
 import { UserTestMapper } from './mapper/user-test.mapper';
@@ -217,26 +216,32 @@ export class UserTestService {
       userTest.test,
     );
 
-    const answerByPart = [...userTest.userAnswers].reduce((acc, ua) => {
+    const answerByPart = userTest.userAnswers.reduce((acc, ua) => {
       const part = ua.question.questionGroup.part;
-      if (!acc.has(part)) acc.set(part, []);
-      acc.get(part)!.push(ua);
+      const partId = part.id;
+      if (!acc.has(partId)) {
+        acc.set(partId, { part: part, answers: [] });
+      }
+      acc.get(partId)!.answers.push(ua);
       return acc;
-    }, new Map<Part, UserAnswer[]>());
+    }, new Map<number, { part: Part; answers: UserAnswer[] }>());
 
-    const partResponses = [...answerByPart.entries()]
-      .map(([part, answers]) => {
+    const partResponses = [...answerByPart.values()]
+      .map(({ part, answers }) => {
         const answerByQuestionGroups = answers.reduce((acc, ua) => {
           const qg = ua.question.questionGroup;
-          if (!acc.has(qg)) acc.set(qg, []);
-          acc.get(qg)!.push(ua);
+          const qgId = qg.id;
+          if (!acc.has(qgId)) {
+            acc.set(qgId, { questionGroup: qg, userAnswers: [] });
+          }
+          acc.get(qgId)!.userAnswers.push(ua);
           return acc;
-        }, new Map<QuestionGroup, UserAnswer[]>());
+        }, new Map<number, { questionGroup: QuestionGroup; userAnswers: UserAnswer[] }>());
 
-        const questionGroupResponses = [...answerByQuestionGroups.entries()]
-          .sort((a, b) => a[0].position - b[0].position)
-          .map(([questionGroup, userAnswers]) => {
-            const questionAndAnswers: LearnerAnswerResponse[] = [...userAnswers]
+        const questionGroupResponses = [...answerByQuestionGroups.values()]
+          .sort((a, b) => a.questionGroup.position - b.questionGroup.position)
+          .map(({ questionGroup, userAnswers }) => {
+            const questionAndAnswers = [...userAnswers]
               .sort((a, b) => a.question.position - b.question.position)
               .map((ua) => this.userAnswerMapper.toLearnerAnswerResponse(ua));
 
