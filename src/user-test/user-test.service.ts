@@ -38,13 +38,13 @@ import { Question } from 'src/entities/question.entity';
 import { QuestionService } from 'src/question/question.service';
 
 type LearnerTestHistoryRawRow = {
-  id: number | string;
+  id: number;
   createdAt: Date | string | null;
   partNames: string;
-  correctAnswers: number | string;
-  totalQuestions: number | string;
-  score: number | string;
-  timeSpent: number | string;
+  correctAnswers: number;
+  totalQuestions: number;
+  score: number;
+  timeSpent: number;
 };
 
 @Injectable()

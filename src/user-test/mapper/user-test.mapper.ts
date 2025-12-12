@@ -25,7 +25,7 @@ export class UserTestMapper {
       parts: userTest.parts ?? null,
       totalQuestions: userTest.totalQuestions ?? 0,
       correctAnswers: userTest.correctAnswers ?? 0,
-      correctPercent: userTest.correctPercent ?? 0.0,
+      correctPercent: Number(userTest.correctPercent ?? 0.0),
       timeSpent: userTest.timeSpent ?? 0,
       userAnswersByPart,
       score: undefined,

@@ -9,7 +9,7 @@ export class TestResultResponseDto {
   correctAnswers: number;
   correctPercent: number;
   timeSpent: number;
-  
+
   // Các trường cho full test
   score?: number;
   listeningScore?: number;
