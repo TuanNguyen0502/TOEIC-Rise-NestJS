@@ -87,7 +87,7 @@ export class TestService {
       id: test.id,
       testName: test.name,
       testSetName: test.testSet.name,
-      numberOfLearnedTests: test.numberOfLearnerTests,
+      numberOfLearnedTests: Number(test.numberOfLearnerTests),
     }));
 
     // Format for PageResponse
@@ -353,9 +353,10 @@ export class TestService {
     return testRepo.save(test);
   }
 
-  isValidFile(file: Express.Multer.File): boolean {
+  isValidFile(file: Express.Multer.File | undefined): boolean {
+    if (!file || !file.originalname) return false;
+
     const filePath = file.originalname;
-    if (!filePath) return false;
     return (
       filePath.endsWith('.xlsx') ||
       filePath.endsWith('.xls') ||

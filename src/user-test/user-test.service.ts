@@ -312,20 +312,13 @@ export class UserTestService {
         (id): id is number => id !== null && id !== undefined,
       ),
     );
-    const partNamesByGroupId =
-      validQuestionGroupIds.size > 0
-        ? await this.questionGroupService.getPartNamesByQuestionGroupIds(
-            validQuestionGroupIds,
-          )
-        : new Map<number, string>();
 
     // group answers by part name
     const answersByPart = new Map<string, any[]>();
     for (const ua of userAnswers) {
       const groupId = ua.questionGroupId ?? ua.question?.questionGroup?.id;
       if (!groupId) continue;
-      const partName = partNamesByGroupId.get(groupId);
-      const finalPartName = partName ?? 'Unknown';
+      const finalPartName = ua.question?.questionGroup?.part?.name ?? 'Unknown';
       if (!answersByPart.has(finalPartName)) {
         answersByPart.set(finalPartName, []);
       }
@@ -423,7 +416,7 @@ export class UserTestService {
     });
     if (!test) throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
 
-    test.numberOfLearnerTests = (test.numberOfLearnerTests ?? 0) + 1;
+    test.numberOfLearnerTests = (Number(test.numberOfLearnerTests) || 0) + 1;
     await this.testRepository.save(test);
 
     // Validate question groups

@@ -133,11 +133,12 @@ export class QuestionGroupService {
   async getPartNamesByQuestionGroupIds(
     questionGroupIds: Set<number>,
   ): Promise<Map<number, string>> {
-    const groups = await this.questionGroupRepo.find({
-      where: { id: In([...questionGroupIds]) },
-      relations: ['part'],
-      select: ['id'],
-    });
+    const groups = await this.questionGroupRepo
+      .createQueryBuilder('qg')
+      .leftJoinAndSelect('qg.part', 'part')
+      .select(['qg.id', 'part.name'])
+      .where('qg.id IN (:...ids)', { ids: [...questionGroupIds] })
+      .getMany();
     return new Map(groups.map((qg) => [qg.id, qg.part.name]));
   }
 

@@ -32,13 +32,15 @@ export class QuestionMapper {
   toLearnerTestQuestionResponse(
     question: Question,
   ): LearnerTestQuestionResponse {
+    const normalizedOptions =
+      !question.options || question.options.length === 0
+        ? [null, null, null, null]
+        : question.options.map((o) => (o === 'null' || o === '' ? null : o));
     return {
       id: question.id,
       position: question.position,
       content: question.content,
-      options: question.options?.map((option) =>
-        option === 'null' ? null : option,
-      ) || [null, null, null, null],
+      options: normalizedOptions,
     };
   }
 }
