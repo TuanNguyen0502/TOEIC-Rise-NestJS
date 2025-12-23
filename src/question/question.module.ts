@@ -7,7 +7,6 @@ import { QuestionGroup } from '../entities/question-group.entity';
 import { Tag } from '../entities/tag.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { QuestionController } from './question.controller';
 import { QuestionGroupModule } from 'src/question-group/question-group.module';
 import { TestSetModule } from 'src/test-set/test-set.module';
 import { TestSet } from 'src/entities/test-set.entity';
@@ -23,7 +22,7 @@ import { QuestionMapper } from './mapper/question.mapper';
     TagModule,
     QuestionModule,
   ],
-  controllers: [AdminQuestionController, QuestionController],
+  controllers: [AdminQuestionController],
   providers: [QuestionService, RolesGuard, QuestionMapper], // Provide RolesGuard
   exports: [QuestionService, QuestionMapper],
 })
