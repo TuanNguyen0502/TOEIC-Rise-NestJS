@@ -59,19 +59,17 @@ export class QuestionService {
       throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
     }
 
-    // 2. Find the question group (to ensure it exists)
-    const questionGroup = await this.questionGroupService.getQuestionGroup(
-      dto.questionGroupId,
-    );
-    if (!questionGroup) {
-      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'QuestionGroup');
-    }
+    await this.updateQuestionWithEntity(question, dto);
+  }
 
+  async updateQuestionWithEntity(
+    question: Question,
+    dto: QuestionRequestDto,
+  ): Promise<void> {
     // 3. Find or create tags
     const tags = await this.tagService.getTagsFromString(dto.tags);
 
     // 4. Update the question entity
-    question.questionGroup = questionGroup;
     question.content = dto.content ?? question.content;
     question.correctOption = dto.correctOption;
     question.explanation = dto.explanation;
@@ -85,10 +83,6 @@ export class QuestionService {
         (key) => `${key}:${options[key]}`, // Use the new constant here
       );
     }
-
-    question.correctOption = dto.correctOption;
-    question.explanation = dto.explanation;
-    question.tags = tags;
 
     // 5. Save the question
     await this.questionRepository.save(question);
