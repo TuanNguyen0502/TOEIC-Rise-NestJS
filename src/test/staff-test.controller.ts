@@ -21,11 +21,32 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { TestRequestDto } from './dto/test-request.dto';
 import { ParseAndValidateJsonPipe } from 'src/common/pipes/parse-and-validate-json.pipe';
 
-@ApiTags('admin/tests')
+@ApiTags('staff/tests')
 @ApiBearerAuth('JWT') // For Swagger UI
-@Controller('admin/tests')
+@Controller('staff/tests')
 @UseGuards(JwtAuthGuard, RolesGuard) // Apply JWT auth and Roles guard
-@Roles(ERole.ADMIN) // Specify that ONLY ADMIN can access
-export class AdminTestController {
+@Roles(ERole.ADMIN, ERole.STAFF) // Specify that ONLY ADMIN can access
+export class StaffTestController {
   constructor(private readonly testService: TestService) {}
+
+  @Get()
+  async getAllTests(@Query() query: GetTestsAdminDto) {
+    return this.testService.getAllTests(query);
+  }
+
+  @Get(':id')
+  async getTestById(@Param('id', ParseIntPipe) id: number) {
+    return this.testService.getAdminTestDetailById(id);
+  }
+
+  @Post('import')
+  @UseInterceptors(FileInterceptor('file'))
+  async importTests(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('testRequest', new ParseAndValidateJsonPipe(TestRequestDto))
+    testRequest: any,
+  ) {
+    await this.testService.importTest(file, testRequest);
+    return { message: 'Test imported' };
+  }
 }

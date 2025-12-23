@@ -8,6 +8,7 @@ import { QuestionGroup } from '../entities/question-group.entity';
 import { Question } from '../entities/question.entity';
 import { Tag } from '../entities/tag.entity';
 import { AdminTestController } from './admin-test.controller';
+import { StaffTestController } from './staff-test.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { PartModule } from 'src/part/part.module';
@@ -39,7 +40,7 @@ import { UserTestModule } from 'src/user-test/user-test.module';
     PartModule,
     forwardRef(() => TestSetModule),
   ],
-  controllers: [TestController, AdminTestController],
+  controllers: [TestController, StaffTestController, AdminTestController],
   providers: [TestService, RolesGuard, TestExcelMapper],
   exports: [TestService],
 })
