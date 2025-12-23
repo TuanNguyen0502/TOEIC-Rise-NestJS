@@ -17,6 +17,8 @@ import { TestSetModule } from './test-set/test-set.module';
 import { UserTestModule } from './user-test/user-test.module';
 import { UserAnswersModule } from './user-answer/user-answers.module';
 import { AnalysisModule } from './analysis/analysis.module';
+import { QuestionGroupModule } from './question-group/question-group.module';
+import { PartModule } from './part/part.module';
 
 @Module({
   imports: [
@@ -76,6 +78,8 @@ import { AnalysisModule } from './analysis/analysis.module';
     UserModule,
     TestModule,
     QuestionModule,
+    QuestionGroupModule,
+    PartModule,
     TestSetModule,
     UserTestModule,
     UserAnswersModule,

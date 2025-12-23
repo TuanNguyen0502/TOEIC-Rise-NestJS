@@ -8,6 +8,7 @@ import { Part } from 'src/entities/part.entity';
 import { QuestionExcelRequestDto } from 'src/test/dto/question-excel-request.dto';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
+import { QuestionGroupResponseDto } from './dto/question-group-response.dto';
 
 @Injectable()
 export class QuestionGroupService {
@@ -149,5 +150,26 @@ export class QuestionGroupService {
       .leftJoinAndSelect('qg.questions', 'questions')
       .where('qg.id IN (:...ids)', { ids: [...ids] })
       .getMany();
+  }
+
+  async getQuestionGroupResponse(id: number): Promise<QuestionGroupResponseDto> {
+    const questionGroup = await this.questionGroupRepo.findOne({
+      where: { id },
+      relations: ['questions', 'questions.tags'], // Load câu hỏi và tags của câu hỏi
+      order: {
+        questions: {
+          position: 'ASC', // Sắp xếp câu hỏi theo thứ tự giống logic Java
+        },
+      },
+    });
+
+    if (!questionGroup) {
+      throw new AppException(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        `Question group with ID ${id}`,
+      );
+    }
+
+    return this.mapper.toResponse(questionGroup);
   }
 }

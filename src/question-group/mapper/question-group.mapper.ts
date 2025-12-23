@@ -4,6 +4,7 @@ import { Test } from 'src/entities/test.entity';
 import { Part } from 'src/entities/part.entity';
 import { QuestionExcelRequestDto } from 'src/test/dto/question-excel-request.dto';
 import { LearnerTestQuestionGroupResponse } from 'src/user-test/dto/learner-test-question-group-response.dto';
+import { QuestionGroupResponseDto } from '../dto/question-group-response.dto';
 
 @Injectable()
 export class QuestionGroupMapper {
@@ -36,6 +37,29 @@ export class QuestionGroupMapper {
       transcript: qg.transcript,
       position: qg.position,
       questions: [],
+    };
+  }
+
+  toResponse(qg: QuestionGroup): QuestionGroupResponseDto {
+    return {
+      id: qg.id,
+      audioUrl: qg.audioUrl,
+      imageUrl: qg.imageUrl,
+      passage: qg.passage,
+      transcript: qg.transcript,
+      position: qg.position,
+      // Map danh sách câu hỏi con
+      questions: qg.questions
+        ? qg.questions.map((q) => ({
+            id: q.id,
+            content: q.content,
+            options: q.options, // TypeORM transformer sẽ tự parse JSON nếu đã cấu hình
+            correctOption: q.correctOption,
+            explanation: q.explanation,
+            position: q.position,
+            tags: q.tags ? q.tags.map((t) => t.name) : [], // Map tags nếu có
+          }))
+        : [],
     };
   }
 }
