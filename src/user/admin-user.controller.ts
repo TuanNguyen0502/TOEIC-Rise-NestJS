@@ -1,4 +1,14 @@
-import { Controller, Get, Query, UseGuards, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  Param,
+  Post,
+  UseInterceptors,
+  Body,
+  UploadedFile,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -6,7 +16,8 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
 import { UserDetailResponse } from './dto/user-detail-response.dto';
-
+import { FileInterceptor } from '@nestjs/platform-express';
+import { UserCreateRequestDto } from './dto/user-create-request.dto';
 
 @Controller('admin/users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,5 +33,15 @@ export class AdminUserController {
   @Get(':id')
   async getUserDetail(@Param('id') id: number): Promise<UserDetailResponse> {
     return await this.userService.getUserDetailById(id);
+  }
+
+  @Post()
+  @UseInterceptors(FileInterceptor('avatar'))
+  async createUser(
+    @Body() dto: UserCreateRequestDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    await this.userService.createUser(dto, file);
+    return { message: 'Create user successfully' };
   }
 }

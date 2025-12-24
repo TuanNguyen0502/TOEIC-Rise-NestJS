@@ -15,6 +15,9 @@ import { UserResponse } from './dto/user-response.dto';
 import { PageResponse } from './dto/page-response.dto';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 import { UserDetailResponse } from './dto/user-detail-response.dto';
+import * as bcrypt from 'bcrypt';
+import { UserCreateRequestDto } from './dto/user-create-request.dto';
+import { EAuthProvider } from 'src/enums/EAuthProvider.enum';
 
 @Injectable()
 export class UserService {
@@ -24,6 +27,8 @@ export class UserService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly cloudinary: CloudinaryService,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
   ) {}
 
   async findOneByEmail(email: string): Promise<Account | null> {
@@ -216,7 +221,10 @@ export class UserService {
     });
 
     if (!user) {
-      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, `User with id ${id} not found`);
+      throw new AppException(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        `User with id ${id} not found`,
+      );
     }
 
     return this.mapToUserDetailResponse(user);
@@ -237,5 +245,61 @@ export class UserService {
       createdAt: user.createdAt ? this.formatDate(user.createdAt) : '',
       updatedAt: user.updatedAt ? this.formatDate(user.updatedAt) : '',
     };
+  }
+
+  async createUser(
+    dto: UserCreateRequestDto,
+    avatarFile?: Express.Multer.File,
+  ): Promise<void> {
+    // 1. Kiểm tra Email trùng (Logic từ isDuplicateEmail)
+    const existingAccount = await this.accountRepository.findOne({
+      where: { email: dto.email },
+    });
+    if (existingAccount) {
+      throw new AppException(ErrorCode.DUPLICATE_EMAIL);
+    }
+
+    // 2. Validate Password
+    if (dto.password !== dto.confirmPassword) {
+      throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+    }
+
+    // 3. Tìm Role
+    const role = await this.roleRepository.findOne({
+      where: { name: dto.role },
+    });
+    if (!role) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Role not found');
+    }
+
+    // 4. Xử lý Upload Avatar (nếu có)
+    let avatarUrl: string | null = null;
+    if (avatarFile) {
+      this.cloudinary.validateImageFile(avatarFile);
+      avatarUrl = await this.cloudinary.uploadFile(avatarFile);
+    }
+
+    // 5. Tạo Account Entity
+    const account = new Account();
+    account.email = dto.email;
+    account.password = await bcrypt.hash(dto.password, 10); // Hash password
+    account.isActive = true;
+    account.authProvider = EAuthProvider.LOCAL;
+
+    // 6. Tạo User Entity
+    const user = new User();
+    user.fullName = dto.fullName;
+    user.gender = dto.gender;
+    user.avatar = avatarUrl || undefined;
+    user.role = role;
+    user.createdAt = new Date();
+    user.updatedAt = new Date();
+
+    // Gán quan hệ: User sở hữu Account (dựa trên cấu hình Entity của bạn)
+    // Nếu User.entity.ts có @OneToOne(() => Account, { cascade: true }) thì chỉ cần save User
+    user.account = account;
+
+    // 7. Lưu xuống DB
+    await this.userRepository.save(user);
   }
 }

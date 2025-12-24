@@ -11,10 +11,11 @@ import * as multer from 'multer';
 import { MulterModule } from '@nestjs/platform-express';
 import { AdminUserController } from './admin-user.controller';
 import { RoleModule } from 'src/role/role.module';
+import { Role } from 'src/entities/role.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Account]),
+    TypeOrmModule.forFeature([User, Account, Role]),
     forwardRef(() => AuthModule),
     CloudinaryModule,
     MulterModule.register({
