@@ -9,6 +9,8 @@ import { AuthModule } from 'src/auth/auth.module';
 import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
 import * as multer from 'multer';
 import { MulterModule } from '@nestjs/platform-express';
+import { AdminUserController } from './admin-user.controller';
+import { RoleModule } from 'src/role/role.module';
 
 @Module({
   imports: [
@@ -19,9 +21,10 @@ import { MulterModule } from '@nestjs/platform-express';
       storage: multer.memoryStorage(),
       limits: { fileSize: 2 * 1024 * 1024 },
     }),
+    RoleModule,
   ],
   providers: [UserService],
-  controllers: [UserController],
+  controllers: [UserController, AdminUserController],
   exports: [UserService],
 })
 export class UserModule {}
