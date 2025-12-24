@@ -34,7 +34,7 @@ async function bootstrap() {
         callback(new Error(`Not allowed by CORS: ${origin}`), false);
       }
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'x-no-retry'],
     credentials: true,
     maxAge: 3600,

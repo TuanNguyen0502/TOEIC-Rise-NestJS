@@ -8,6 +8,7 @@ import {
   UseInterceptors,
   Body,
   UploadedFile,
+  Patch,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
@@ -43,5 +44,11 @@ export class AdminUserController {
   ) {
     await this.userService.createUser(dto, file);
     return { message: 'Create user successfully' };
+  }
+
+  @Patch(':id')
+  async changeUserStatus(@Param('id') id: number) {
+    await this.userService.changeAccountStatus(id);
+    return { message: 'Change user status successfully' };
   }
 }

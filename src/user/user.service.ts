@@ -18,6 +18,7 @@ import { UserDetailResponse } from './dto/user-detail-response.dto';
 import * as bcrypt from 'bcrypt';
 import { UserCreateRequestDto } from './dto/user-create-request.dto';
 import { EAuthProvider } from 'src/enums/EAuthProvider.enum';
+import { ERole } from 'src/enums/ERole.enum';
 
 @Injectable()
 export class UserService {
@@ -301,5 +302,32 @@ export class UserService {
 
     // 7. Lưu xuống DB
     await this.userRepository.save(user);
+  }
+
+  async changeAccountStatus(userId: number): Promise<void> {
+    // 1. Tìm User kèm Account và Role
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['account', 'role'],
+    });
+
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, `User with id ${userId} not found`);
+    }
+
+    // 2. Validate: Không được khóa tài khoản ADMIN
+    if (user.role.name === ERole.ADMIN) {
+      throw new AppException(
+        ErrorCode.INVALID_REQUEST,
+        'Cannot change status of ADMIN',
+      );
+    }
+
+    // 3. Đảo ngược trạng thái isActive của Account
+    if (user.account) {
+      user.account.isActive = !user.account.isActive;
+      // Lưu thay đổi vào bảng Account
+      await this.accountRepository.save(user.account);
+    }
   }
 }
