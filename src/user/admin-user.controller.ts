@@ -21,6 +21,7 @@ import { UserDetailResponse } from './dto/user-detail-response.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserCreateRequestDto } from './dto/user-create-request.dto';
 import { UserUpdateRequestDto } from './dto/user-update-request.dto';
+import { UserResetPasswordDto } from './dto/user-reset-password.dto';
 
 @Controller('admin/users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -63,5 +64,14 @@ export class AdminUserController {
   ) {
     await this.userService.updateUser(id, dto, file);
     return { message: 'Update user successfully' };
+  }
+
+  @Put(':id/reset-password')
+  async resetUserPassword(
+    @Param('id') id: number,
+    @Body() dto: UserResetPasswordDto,
+  ) {
+    await this.userService.resetPassword(id, dto);
+    return { message: 'Reset password successfully' };
   }
 }

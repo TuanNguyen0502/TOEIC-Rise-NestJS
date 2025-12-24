@@ -20,6 +20,7 @@ import { UserCreateRequestDto } from './dto/user-create-request.dto';
 import { EAuthProvider } from 'src/enums/EAuthProvider.enum';
 import { ERole } from 'src/enums/ERole.enum';
 import { UserUpdateRequestDto } from './dto/user-update-request.dto';
+import { UserResetPasswordDto } from './dto/user-reset-password.dto';
 
 @Injectable()
 export class UserService {
@@ -313,7 +314,10 @@ export class UserService {
     });
 
     if (!user) {
-      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, `User with id ${userId} not found`);
+      throw new AppException(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        `User with id ${userId} not found`,
+      );
     }
 
     // 2. Validate: Không được khóa tài khoản ADMIN
@@ -344,11 +348,16 @@ export class UserService {
     });
 
     if (!user) {
-      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, `User with id ${id} not found`);
+      throw new AppException(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        `User with id ${id} not found`,
+      );
     }
     // 3. Xử lý Role
     if (dto.role) {
-      const role = await this.roleRepository.findOne({ where: { name: dto.role } });
+      const role = await this.roleRepository.findOne({
+        where: { name: dto.role },
+      });
       if (!role) {
         throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Role not found');
       }
@@ -375,5 +384,41 @@ export class UserService {
     user.updatedAt = new Date();
 
     await this.userRepository.save(user);
+  }
+
+  async resetPassword(
+    userId: number,
+    dto: UserResetPasswordDto,
+  ): Promise<void> {
+    // 1. Kiểm tra Confirm Password
+    if (dto.password !== dto.confirmPassword) {
+      throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+    }
+
+    // 2. Tìm User kèm Account
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['account'], // Quan trọng: Load relation Account để update password
+    });
+
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+    }
+
+    if (!user.account) {
+      throw new AppException(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        'User account not found',
+      );
+    }
+
+    // 3. Hash password mới (Dùng bcrypt)
+    const salt = await bcrypt.genSalt();
+    const hashedPassword = await bcrypt.hash(dto.password, salt);
+
+    // 4. Cập nhật và lưu vào bảng Account
+    await this.accountRepository.update(user.account.id, {
+      password: hashedPassword,
+    });
   }
 }
