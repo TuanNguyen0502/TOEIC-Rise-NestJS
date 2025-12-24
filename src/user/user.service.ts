@@ -14,6 +14,7 @@ import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { UserResponse } from './dto/user-response.dto';
 import { PageResponse } from './dto/page-response.dto';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
+import { UserDetailResponse } from './dto/user-detail-response.dto';
 
 @Injectable()
 export class UserService {
@@ -206,5 +207,35 @@ export class UserService {
   private formatDate(date: Date): string {
     const pad = (n: number) => (n < 10 ? '0' + n : n);
     return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  async getUserDetailById(id: number): Promise<UserDetailResponse> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: ['account', 'role'], // Load quan hệ Account và Role
+    });
+
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, `User with id ${id} not found`);
+    }
+
+    return this.mapToUserDetailResponse(user);
+  }
+
+  // Helper mapping (Tương đương UserMapper.toUserDetailResponse trong Java)
+  private mapToUserDetailResponse(user: User): UserDetailResponse {
+    return {
+      userId: user.id,
+      email: user.account?.email || '',
+      authProvider: user.account?.authProvider,
+      isActive: user.account?.isActive ?? false,
+      fullName: user.fullName,
+      gender: user.gender,
+      avatar: user.avatar || null,
+      role: user.role?.name || null,
+      // Format ngày tháng giống Java (dd-MM-yyyy HH:mm:ss)
+      createdAt: user.createdAt ? this.formatDate(user.createdAt) : '',
+      updatedAt: user.updatedAt ? this.formatDate(user.updatedAt) : '',
+    };
   }
 }
