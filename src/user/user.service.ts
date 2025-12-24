@@ -19,6 +19,7 @@ import * as bcrypt from 'bcrypt';
 import { UserCreateRequestDto } from './dto/user-create-request.dto';
 import { EAuthProvider } from 'src/enums/EAuthProvider.enum';
 import { ERole } from 'src/enums/ERole.enum';
+import { UserUpdateRequestDto } from './dto/user-update-request.dto';
 
 @Injectable()
 export class UserService {
@@ -209,10 +210,10 @@ export class UserService {
     };
   }
 
-  // Hàm helper format ngày (dd-MM-yyyy HH:mm:ss)
+  // Hàm helper format ngày yyyy-MM-dd HH:mm:ss giống Java
   private formatDate(date: Date): string {
     const pad = (n: number) => (n < 10 ? '0' + n : n);
-    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
   async getUserDetailById(id: number): Promise<UserDetailResponse> {
@@ -329,5 +330,50 @@ export class UserService {
       // Lưu thay đổi vào bảng Account
       await this.accountRepository.save(user.account);
     }
+  }
+
+  async updateUser(
+    id: number,
+    dto: UserUpdateRequestDto,
+    avatarFile?: Express.Multer.File,
+  ): Promise<void> {
+    // 1. Tìm User cần sửa
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: ['account', 'role'],
+    });
+
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, `User with id ${id} not found`);
+    }
+    // 3. Xử lý Role
+    if (dto.role) {
+      const role = await this.roleRepository.findOne({ where: { name: dto.role } });
+      if (!role) {
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Role not found');
+      }
+      user.role = role;
+    }
+
+    // 4. Xử lý Avatar (nếu có upload file mới)
+    if (avatarFile) {
+      this.cloudinary.validateImageFile(avatarFile);
+      // Nếu user đã có avatar cũ, logic updateFile sẽ tự xóa cũ -> up mới
+      const newAvatarUrl = await this.cloudinary.updateFile(
+        avatarFile,
+        user.avatar || '',
+      );
+      user.avatar = newAvatarUrl;
+    }
+
+    // 5. Cập nhật các thông tin cơ bản khác
+    if (dto.fullName) user.fullName = dto.fullName;
+    if (dto.gender) user.gender = dto.gender;
+    if (dto.isActive !== undefined) {
+      user.account.isActive = dto.isActive;
+    }
+    user.updatedAt = new Date();
+
+    await this.userRepository.save(user);
   }
 }
