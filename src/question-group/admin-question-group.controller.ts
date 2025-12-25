@@ -45,9 +45,7 @@ export class AdminQuestionGroupController {
       audio?: Express.Multer.File[];
       image?: Express.Multer.File[];
     },
-  ) {
-    // files có thể là object rỗng {} nếu không upload gì
+  ): Promise<void> {
     await this.questionGroupService.updateQuestionGroup(id, dto, files || {});
-    return { message: 'Update successful' };
   }
 }

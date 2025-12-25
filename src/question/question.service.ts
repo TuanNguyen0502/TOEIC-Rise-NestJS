@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Question } from '../entities/question.entity';
@@ -22,6 +22,7 @@ export class QuestionService {
     private questionRepository: Repository<Question>,
     @InjectRepository(Test)
     private readonly testRepository: Repository<Test>,
+    @Inject(forwardRef(() => QuestionGroupService))
     private readonly questionGroupService: QuestionGroupService,
     private readonly tagService: TagService,
     private readonly questionMapper: QuestionMapper,
@@ -182,5 +183,21 @@ export class QuestionService {
       },
       relations: ['tags'],
     });
+  }
+
+  /**
+   * Corresponds to: questionService.getQuestionsByQuestionGroupId(questionGroupId)
+   * Returns list of QuestionResponse for a question group
+   */
+  async getQuestionsByQuestionGroupId(
+    questionGroupId: number,
+  ): Promise<QuestionResponseDto[]> {
+    const questions = await this.questionRepository.find({
+      where: { questionGroup: { id: questionGroupId } },
+      relations: ['tags'],
+      order: { position: 'ASC' },
+    });
+
+    return questions.map((q) => this.questionMapper.toQuestionResponse(q));
   }
 }

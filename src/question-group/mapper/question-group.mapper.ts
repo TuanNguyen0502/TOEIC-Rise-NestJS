@@ -5,6 +5,7 @@ import { Part } from 'src/entities/part.entity';
 import { QuestionExcelRequestDto } from 'src/test/dto/question-excel-request.dto';
 import { LearnerTestQuestionGroupResponse } from 'src/user-test/dto/learner-test-question-group-response.dto';
 import { QuestionGroupResponseDto } from '../dto/question-group-response.dto';
+import { QuestionResponseDto } from 'src/question/dto/question-response.dto';
 
 @Injectable()
 export class QuestionGroupMapper {
@@ -40,7 +41,10 @@ export class QuestionGroupMapper {
     };
   }
 
-  toResponse(qg: QuestionGroup): QuestionGroupResponseDto {
+  toResponse(
+    qg: QuestionGroup,
+    questions: QuestionResponseDto[] = [],
+  ): QuestionGroupResponseDto {
     return {
       id: qg.id,
       audioUrl: qg.audioUrl,
@@ -48,18 +52,16 @@ export class QuestionGroupMapper {
       passage: qg.passage,
       transcript: qg.transcript,
       position: qg.position,
-      // Map danh sách câu hỏi con
-      questions: qg.questions
-        ? qg.questions.map((q) => ({
-            id: q.id,
-            content: q.content,
-            options: q.options, // TypeORM transformer sẽ tự parse JSON nếu đã cấu hình
-            correctOption: q.correctOption,
-            explanation: q.explanation,
-            position: q.position,
-            tags: q.tags ? q.tags.map((t) => t.name) : [], // Map tags nếu có
-          }))
-        : [],
+      // Map danh sách câu hỏi con từ parameter (corresponds to Java logic)
+      questions: questions.map((q) => ({
+        id: q.id,
+        content: q.content,
+        options: q.options,
+        correctOption: q.correctOption,
+        explanation: q.explanation,
+        position: q.position,
+        tags: q.tags || [],
+      })),
     };
   }
 }

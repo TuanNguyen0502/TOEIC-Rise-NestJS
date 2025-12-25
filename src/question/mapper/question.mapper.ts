@@ -4,6 +4,7 @@ import { Question } from 'src/entities/question.entity';
 import { QuestionGroup } from 'src/entities/question-group.entity';
 import { QuestionExcelRequestDto } from 'src/test/dto/question-excel-request.dto';
 import { LearnerTestQuestionResponse } from 'src/user-test/dto/learner-test-question-response.dto';
+import { QuestionResponseDto } from '../dto/question-response.dto';
 
 @Injectable()
 export class QuestionMapper {
@@ -41,6 +42,22 @@ export class QuestionMapper {
       position: question.position,
       content: question.content,
       options: normalizedOptions,
+    };
+  }
+
+  /**
+   * Corresponds to: questionMapper.toQuestionResponse(question)
+   * Maps Question entity to QuestionResponseDto
+   */
+  toQuestionResponse(question: Question): QuestionResponseDto {
+    return {
+      id: question.id,
+      position: question.position,
+      content: question.content || '',
+      options: question.options || [],
+      correctOption: question.correctOption || '',
+      explanation: question.explanation,
+      tags: question.tags ? question.tags.map((tag) => tag.name) : [],
     };
   }
 }

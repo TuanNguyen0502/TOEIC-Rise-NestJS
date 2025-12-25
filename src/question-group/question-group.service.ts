@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { QuestionGroup } from 'src/entities/question-group.entity';
@@ -12,6 +12,11 @@ import { QuestionGroupResponseDto } from './dto/question-group-response.dto';
 import { QuestionGroupUpdateRequestDto } from './dto/question-group-update-request.dto';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { ETestStatus } from 'src/enums/ETestStatus.enum';
+import {
+  QUESTION_GROUP_AUDIO_MAX_SIZE,
+  QUESTION_GROUP_IMAGE_MAX_SIZE,
+} from 'src/common/constants/constants';
+import { QuestionService } from 'src/question/question.service';
 
 @Injectable()
 export class QuestionGroupService {
@@ -22,6 +27,8 @@ export class QuestionGroupService {
     private readonly testRepo: Repository<Test>,
     private readonly mapper: QuestionGroupMapper,
     private readonly cloudinaryService: CloudinaryService,
+    @Inject(forwardRef(() => QuestionService))
+    private readonly questionService: QuestionService,
   ) {}
 
   async createQuestionGroup(
@@ -161,15 +168,7 @@ export class QuestionGroupService {
   async getQuestionGroupResponse(
     id: number,
   ): Promise<QuestionGroupResponseDto> {
-    const questionGroup = await this.questionGroupRepo.findOne({
-      where: { id },
-      relations: ['questions', 'questions.tags'], // Load câu hỏi và tags của câu hỏi
-      order: {
-        questions: {
-          position: 'ASC', // Sắp xếp câu hỏi theo thứ tự giống logic Java
-        },
-      },
-    });
+    const questionGroup = await this.getQuestionGroup(id);
 
     if (!questionGroup) {
       throw new AppException(
@@ -178,7 +177,12 @@ export class QuestionGroupService {
       );
     }
 
-    return this.mapper.toResponse(questionGroup);
+    // Get questions using QuestionService (corresponds to Java logic)
+    const questions = await this.questionService.getQuestionsByQuestionGroupId(
+      id,
+    );
+
+    return this.mapper.toResponse(questionGroup, questions);
   }
 
   async updateQuestionGroup(
@@ -230,7 +234,7 @@ export class QuestionGroupService {
     await this.questionGroupRepo.save(questionGroup);
 
     // 4. Update trạng thái Test về PENDING (nếu chưa phải)
-    await this.changeTestStatusToPending(questionGroup.test);
+    await this.changeTestStatusToPending(questionGroup);
   }
 
   private async processMediaFile(
@@ -272,21 +276,37 @@ export class QuestionGroupService {
     url?: string,
   ) {
     const isListening = this.isListeningPart(part);
-    const hasAudio = !!file || !!url;
+    const hasAudioFile = !!file;
+    const hasAudioUrl = !!url && url.trim().length > 0;
 
-    if (!isListening && hasAudio) {
+    // Non-listening parts should not have audio
+    if (!isListening && (hasAudioFile || hasAudioUrl)) {
       throw new AppException(
         ErrorCode.INVALID_REQUEST,
         'Audio should not be provided for non-listening parts.',
       );
     }
-    if (isListening && !hasAudio) {
+    // Listening parts require audio
+    if (isListening && !hasAudioFile && !hasAudioUrl) {
       throw new AppException(
         ErrorCode.INVALID_REQUEST,
         'Audio is required for listening parts.',
       );
     }
-    // Validate file size nếu cần (thường cấu hình ở MulterOptions rồi)
+    // Validate audio file size
+    if (hasAudioFile && file.size > QUESTION_GROUP_AUDIO_MAX_SIZE) {
+      throw new AppException(
+        ErrorCode.INVALID_REQUEST,
+        'Audio file size exceeds the maximum limit.',
+      );
+    }
+    // Validate audio file and URL
+    if (hasAudioFile) {
+      this.cloudinaryService.validateAudioFile(file);
+    }
+    if (hasAudioUrl) {
+      this.cloudinaryService.validateAudioURL(url);
+    }
   }
 
   private validateImageForPart(
@@ -294,47 +314,84 @@ export class QuestionGroupService {
     file: Express.Multer.File | null,
     url?: string,
   ) {
-    const hasImage = !!file || !!url;
+    const hasImageFile = !!file;
+    const hasImageUrl = !!url && url.trim().length > 0;
 
-    // Part 1 bắt buộc có ảnh
-    if (part.name.includes('1') && !hasImage) {
+    // Part 1 requires an image
+    if (part.name.includes('1') && !hasImageFile && !hasImageUrl) {
       throw new AppException(
         ErrorCode.INVALID_REQUEST,
         `Image is required for part ${part.name}.`,
       );
     }
-
-    // Part 2, 3, 5, 6 không được có ảnh
-    const noImageParts = ['2', '3', '5', '6'];
-    const isNoImagePart = noImageParts.some((p) => part.name.includes(p));
-
-    if (isNoImagePart && hasImage) {
+    // Parts 2, 3, 5, and 6 should not have images
+    if (
+      part.name.includes('2') ||
+      part.name.includes('3') ||
+      part.name.includes('5') ||
+      part.name.includes('6')
+    ) {
+      if (hasImageFile || hasImageUrl) {
+        throw new AppException(
+          ErrorCode.INVALID_REQUEST,
+          `Image should not be provided for part ${part.name}.`,
+        );
+      }
+    }
+    // Validate image file size
+    if (hasImageFile && file.size > QUESTION_GROUP_IMAGE_MAX_SIZE) {
       throw new AppException(
         ErrorCode.INVALID_REQUEST,
-        `Image should not be provided for part ${part.name}.`,
+        'Image file size exceeds the maximum limit.',
       );
+    }
+    // Validate image file and URL
+    if (hasImageFile) {
+      this.cloudinaryService.validateImageFile(file);
+    }
+    if (hasImageUrl) {
+      this.cloudinaryService.validateImageURL(url);
     }
   }
 
   private validatePassageForPart(part: Part, passage?: string) {
-    const isReadingPassage = part.name.includes('6') || part.name.includes('7');
-
-    if (isReadingPassage && (!passage || passage.trim() === '')) {
+    // Parts 6 and 7 require a passage
+    // Other parts should not have a passage
+    if (part.name.includes('6') || part.name.includes('7')) {
+      if (!passage || passage.trim() === '') {
+        throw new AppException(
+          ErrorCode.INVALID_REQUEST,
+          'Passage is required for parts 6 and 7.',
+        );
+      }
+    } else if (passage && passage.trim() !== '') {
       throw new AppException(
         ErrorCode.INVALID_REQUEST,
-        'Passage is required for parts 6 and 7.',
-      );
-    }
-    if (!isReadingPassage && passage && passage.trim() !== '') {
-      // Tùy logic, bên Java đang throw lỗi nếu part khác mà có passage
-      throw new AppException(
-        ErrorCode.INVALID_REQUEST,
-        'Passage should not be provided for this part.',
+        'Passage should not be provided for listening parts or part 5.',
       );
     }
   }
 
-  private async changeTestStatusToPending(test: Test) {
+  /**
+   * Corresponds to: changeTestStatusToPending(questionGroup) - @Async method in Java
+   * Change test status to PENDING if not already PENDING
+   */
+  private async changeTestStatusToPending(questionGroup: QuestionGroup) {
+    // Ensure test relation is loaded
+    let test: Test;
+    if (questionGroup.test) {
+      test = questionGroup.test;
+    } else {
+      const loaded = await this.questionGroupRepo.findOne({
+        where: { id: questionGroup.id },
+        relations: ['test'],
+      });
+      if (!loaded || !loaded.test) {
+        return;
+      }
+      test = loaded.test;
+    }
+
     if (test.status !== ETestStatus.PENDING) {
       test.status = ETestStatus.PENDING;
       await this.testRepo.save(test);

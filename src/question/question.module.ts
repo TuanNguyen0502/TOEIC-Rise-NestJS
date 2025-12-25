@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { QuestionService } from './question.service';
 import { AdminQuestionController } from './admin-question.controller';
@@ -20,10 +20,9 @@ import { TransformOptionsPipe } from './pipes/transform-options.pipe';
   imports: [
     TypeOrmModule.forFeature([Question, QuestionGroup, Tag, TestSet, Test]),
     AuthModule, // Import AuthModule to use JwtAuthGuard
-    QuestionGroupModule,
+    forwardRef(() => QuestionGroupModule), // Use forwardRef to avoid circular dependency
     TestSetModule,
     TagModule,
-    QuestionModule,
   ],
   controllers: [AdminQuestionController],
   providers: [
