@@ -20,6 +20,7 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { QuestionGroupModule } from './question-group/question-group.module';
 import { PartModule } from './part/part.module';
 import { QuestionReportModule } from './question-report/question-report.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { QuestionReportModule } from './question-report/question-report.module';
     UserAnswersModule,
     AnalysisModule,
     QuestionReportModule,
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [AppService],
