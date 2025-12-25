@@ -1,5 +1,5 @@
 export class ChatbotResponseDto {
-  response: string; // Chunk text
+  content: string;
   conversationId: string;
   messageId: string;
 }

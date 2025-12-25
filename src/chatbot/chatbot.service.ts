@@ -6,6 +6,7 @@ import {
   GoogleGenerativeAI,
   GenerativeModel,
   Content,
+  ChatSession,
 } from '@google/generative-ai';
 import { Observable, Subject } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,7 +22,7 @@ import { ErrorCode } from 'src/enums/ErrorCode.enum';
 export class ChatbotService {
   private genAI: GoogleGenerativeAI;
   private model: GenerativeModel;
-  private readonly CHAT_MEMORY_RETRIEVE_SIZE = 100; // Config giống Java
+  private ChatSessions: { [conversationId: string]: ChatSession } = {};
 
   constructor(
     private readonly configService: ConfigService,
@@ -35,9 +36,6 @@ export class ChatbotService {
     this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   }
 
-  /**
-   * Main Method: Chat About Question (Stream)
-   */
   chatAboutQuestion(
     dto: ChatAboutQuestionRequestDto,
   ): Observable<ChatbotResponseDto> {
@@ -49,9 +47,6 @@ export class ChatbotService {
     return subject.asObservable();
   }
 
-  /**
-   * Logic xử lý chính (Mô phỏng Advisor chain: Load History -> Save User Msg -> Call AI -> Save AI Msg)
-   */
   private async processChatFlow(
     dto: ChatAboutQuestionRequestDto,
     subject: Subject<ChatbotResponseDto>,
@@ -59,7 +54,6 @@ export class ChatbotService {
     try {
       // 1. Xác định Conversation ID & Message ID
       const conversationId = dto.conversationId || uuidv4();
-      const userMessageId = uuidv4();
       const aiMessageId = uuidv4();
 
       // 2. Xây dựng nội dung tin nhắn (Prompt Context nếu là lần đầu)
@@ -72,33 +66,11 @@ export class ChatbotService {
         messageToSend = `${contextPrompt}\n\nUser Message: ${dto.message}`;
       }
 
-      // 3. [Advisor Logic] Lưu tin nhắn User vào DB
-      await this.saveMessageToMemory(
-        conversationId,
-        userMessageId,
-        'USER',
-        messageToSend, // Lưu tin nhắn đầy đủ (có context) để lịch sử chính xác
-      );
-
       // 4. [Advisor Logic] Lấy lịch sử chat từ DB
       const history = await this.getChatHistoryForGemini(conversationId);
 
-      // 5. Khởi tạo Chat Session
-      const chatSession = this.model.startChat({
-        history: history,
-      });
-
       // 6. Gọi Gemini (Streaming)
-      // Lưu ý: Vì history đã chứa tin nhắn vừa lưu ở bước 3,
-      // nên ta không cần gửi lại text trong sendMessageStream nếu history đã load nó.
-      // TUY NHIÊN, Gemini SDK client-side quản lý history hơi khác DB.
-      // Cách an toàn nhất: Load history CŨ (trừ tin nhắn hiện tại), sau đó send tin nhắn hiện tại.
-
-      // Fix logic lấy history: Lấy N tin nhắn TRƯỚC tin nhắn hiện tại
-      const historyForSession = history.slice(0, -1); // Bỏ tin nhắn vừa save
-
-      const session = this.model.startChat({ history: historyForSession });
-      const result = await session.sendMessageStream(messageToSend);
+      const result = await history.sendMessageStream(messageToSend);
 
       let fullAiResponse = '';
 
@@ -109,19 +81,11 @@ export class ChatbotService {
 
         // Bắn data về client qua SSE
         subject.next({
-          response: chunkText,
+          content: chunkText,
           conversationId: conversationId,
           messageId: aiMessageId,
         });
       }
-
-      // 8. [Advisor Logic] Lưu câu trả lời của AI vào DB sau khi stream xong
-      await this.saveMessageToMemory(
-        conversationId,
-        aiMessageId,
-        'ASSISTANT',
-        fullAiResponse,
-      );
 
       subject.complete();
     } catch (error) {
@@ -130,44 +94,15 @@ export class ChatbotService {
     }
   }
 
-  // --- Helper Methods (Tương tự logic Java) ---
+  private async getChatHistoryForGemini(conversationId: string) {
+    let result = await this.ChatSessions[conversationId];
 
-  private async saveMessageToMemory(
-    conversationId: string,
-    messageId: string,
-    type: 'USER' | 'ASSISTANT' | 'SYSTEM',
-    content: string,
-  ) {
-    const chatMessage = this.chatMessageRepo.create({
-      id: messageId,
-      conversationId: conversationId,
-      messageType: type,
-      content: content,
-      metadata: {
-        // Giả lập metadata giống Java Advisor
-        messageId: messageId,
-        conversationId: conversationId,
-        timestamp: new Date().toISOString(),
-      },
-    });
-    await this.chatMessageRepo.save(chatMessage);
-  }
+    if (!result) {
+      result = this.model.startChat();
+      this.ChatSessions[conversationId] = result;
+    }
 
-  private async getChatHistoryForGemini(
-    conversationId: string,
-  ): Promise<Content[]> {
-    // Lấy 100 tin nhắn gần nhất
-    const messages = await this.chatMessageRepo.find({
-      where: { conversationId },
-      order: { createdAt: 'ASC' },
-      take: this.CHAT_MEMORY_RETRIEVE_SIZE,
-    });
-
-    // Map sang format của Gemini
-    return messages.map((msg) => ({
-      role: msg.messageType === 'USER' ? 'user' : 'model', // Map 'ASSISTANT' -> 'model'
-      parts: [{ text: msg.content }],
-    }));
+    return result;
   }
 
   private async buildQuestionContext(userAnswerId: number): Promise<string> {

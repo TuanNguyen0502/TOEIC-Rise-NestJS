@@ -1,12 +1,4 @@
-import { 
-  Controller, 
-  Post, 
-  Body, 
-  UseGuards, 
-  Sse, 
-  UseInterceptors 
-} from '@nestjs/common';
-import { AnyFilesInterceptor } from '@nestjs/platform-express';
+import { Controller, Post, Body, UseGuards, Sse } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ChatbotService } from './chatbot.service';
@@ -20,14 +12,12 @@ export class LearnerChatbotController {
 
   @Post('chat-about-question')
   @Sse()
-  @UseInterceptors(AnyFilesInterceptor())
   chatAboutQuestion(
     @Body() request: ChatAboutQuestionRequestDto,
   ): Observable<any> {
-    console.log('✅ Controller đã nhận request:', request);
 
-    return this.chatbotService.chatAboutQuestion(request).pipe(
-      map((data) => ({ data }))
-    );
+    return this.chatbotService
+      .chatAboutQuestion(request)
+      .pipe(map((data) => ({ data })));
   }
 }
