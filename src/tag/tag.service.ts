@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { Tag } from '../entities/tag.entity';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
+import { PageResponse } from 'src/test-set/dto/page-response.dto';
+import { TagResponseDto } from './dto/tag-response.dto';
 
 @Injectable()
 export class TagService {
@@ -116,5 +118,48 @@ export class TagService {
     }
 
     return tag;
+  }
+
+  /**
+   * Corresponds to: tagService.getAllTags(page, pageSize, tagsName)
+   * Get all tags with pagination and filtering by name
+   */
+  async getAllTags(
+    page: number,
+    pageSize: number,
+    tagName: string,
+  ): Promise<PageResponse<TagResponseDto[]>> {
+    const skip = page * pageSize;
+
+    // Build where condition
+    const where: any = {};
+    if (tagName && tagName.trim().length > 0) {
+      where.name = Like(`%${tagName.trim()}%`);
+    }
+
+    // Find tags with pagination and sorting
+    const [tags, total] = await this.tagRepository.findAndCount({
+      where,
+      order: { name: 'ASC' }, // Sort by name ascending
+      skip,
+      take: pageSize,
+    });
+
+    // Map to TagResponseDto
+    const tagResponses: TagResponseDto[] = tags.map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+    }));
+
+    // Return PageResponse
+    return {
+      meta: {
+        page,
+        pageSize,
+        pages: Math.ceil(total / pageSize),
+        total,
+      },
+      result: tagResponses,
+    };
   }
 }

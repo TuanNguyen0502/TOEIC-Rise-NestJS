@@ -2,9 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Tag } from '../entities/tag.entity';
 import { TagService } from './tag.service';
+import { AdminTagController } from './admin-tag.controller';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Tag])],
+  imports: [TypeOrmModule.forFeature([Tag]), AuthModule],
+  controllers: [AdminTagController],
   providers: [TagService],
   exports: [TagService], // cho phép module khác inject TagService
 })
