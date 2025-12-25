@@ -12,10 +12,11 @@ import { TestSetModule } from 'src/test-set/test-set.module';
 import { TestSet } from 'src/entities/test-set.entity';
 import { TagModule } from 'src/tag/tag.module';
 import { QuestionMapper } from './mapper/question.mapper';
+import { Test } from 'src/entities/test.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Question, QuestionGroup, Tag, TestSet]),
+    TypeOrmModule.forFeature([Question, QuestionGroup, Tag, TestSet, Test]),
     AuthModule, // Import AuthModule to use JwtAuthGuard
     QuestionGroupModule,
     TestSetModule,

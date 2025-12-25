@@ -10,6 +10,10 @@ import { EQuestionReportStatus } from 'src/enums/EQuestionReportStatus.enum';
 import { QuestionReportDetailResponseDto } from './dto/question-report-detail-response.dto';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
+import { QuestionService } from 'src/question/question.service';
+import { QuestionGroupService } from 'src/question-group/question-group.service';
+import { ResolveQuestionReportDto } from './dto/resolve-question-report.dto';
+import { ERole } from 'src/enums/ERole.enum';
 
 @Injectable()
 export class QuestionReportService {
@@ -18,6 +22,8 @@ export class QuestionReportService {
     private readonly questionReportRepo: Repository<QuestionReport>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    private readonly questionService: QuestionService,
+    private readonly questionGroupService: QuestionGroupService,
   ) {}
 
   async getAllReports(
@@ -137,22 +143,17 @@ export class QuestionReportService {
       );
     }
 
-    // 2. Check quyền Staff (Logic cũ)
-    const isStaff = await this.userRepo.findOne({
-      where: {
-        account: { email },
-        role: In(['STAFF']),
-      },
+    // 2. Tìm Resolver (User hiện tại)
+    const resolver = await this.userRepo.findOne({
+      where: { account: { email } },
+      relations: ['role'],
     });
-    const isPending = report.status === EQuestionReportStatus.PENDING;
-    const isAssignedToMe = report.resolver?.account?.email === email;
 
-    if (isStaff && !isPending && !isAssignedToMe) {
-      throw new AppException(
-        ErrorCode.UNAUTHORIZED,
-        'You do not have permission to view this report',
-      );
+    if (!resolver) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User not found');
     }
+
+    this.checkStaffPermission(resolver, report);
 
     // 3. Map sang DTO chi tiết
     return this.mapToDetailResponse(report);
@@ -203,5 +204,92 @@ export class QuestionReportService {
       resolverFullName: resolver?.fullName || null,
       resolverEmail: resolver?.account?.email || null,
     };
+  }
+
+  async resolveReport(
+    reportId: number,
+    email: string,
+    dto: ResolveQuestionReportDto,
+    files: { audio?: Express.Multer.File[]; image?: Express.Multer.File[] },
+  ): Promise<void> {
+    // 1. Tìm Report
+    const report = await this.questionReportRepo.findOne({
+      where: { id: reportId },
+      relations: [
+        'question',
+        'question.questionGroup',
+        'resolver',
+        'resolver.account',
+      ],
+    });
+    if (!report)
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question Report');
+
+    // 2. Tìm Resolver (User hiện tại)
+    const resolver = await this.userRepo.findOne({
+      where: { account: { email } },
+      relations: ['role'],
+    });
+
+    if (!resolver) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User not found');
+    }
+
+    this.checkStaffPermission(resolver, report);
+
+    // 4. Update Question (Nếu có request)
+    if (dto.questionUpdate) {
+      // Đảm bảo ID khớp với report
+      if (dto.questionUpdate.id !== report.question.id) {
+        throw new AppException(
+          ErrorCode.INVALID_REQUEST,
+          'Question ID mismatch',
+        );
+      }
+      await this.questionService.updateQuestionFromReport(dto.questionUpdate);
+    }
+
+    // 5. Update Group (Nếu có request)
+    if (dto.questionGroupUpdate) {
+      await this.questionGroupService.updateQuestionGroup(
+        report.question.questionGroup.id, // Lấy ID group từ question hiện tại
+        dto.questionGroupUpdate,
+        files,
+      );
+    }
+
+    // 6. Update Report Status
+    report.resolver = resolver;
+    report.status = dto.status;
+    report.resolvedNote = dto.resolvedNote;
+
+    await this.questionReportRepo.save(report);
+  }
+
+  private checkStaffPermission(
+    currentUser: User,
+    questionReport: QuestionReport,
+  ): void {
+    // 1. Kiểm tra xem user có phải là STAFF không
+    // Lưu ý: Cần đảm bảo currentUser đã được query kèm relation 'role'
+    if (currentUser.role?.name === ERole.STAFF) {
+      // 2. Nếu Report đã có người giải quyết (resolver khác null)
+      if (questionReport.resolver) {
+        // Thì người giải quyết phải là chính Staff đó
+        if (questionReport.resolver.id !== currentUser.id) {
+          throw new AppException(
+            ErrorCode.UNAUTHORIZED, // Hoặc FORBIDDEN tùy theo Enum bạn định nghĩa
+            'You are not authorized to access this report assigned to another staff',
+          );
+        }
+      }
+      // 3. Nếu chưa có người giải quyết, thì trạng thái phải là PENDING
+      else if (questionReport.status !== EQuestionReportStatus.PENDING) {
+        throw new AppException(
+          ErrorCode.UNAUTHORIZED,
+          'Staff can only access pending reports if not assigned',
+        );
+      }
+    }
   }
 }

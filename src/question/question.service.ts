@@ -12,6 +12,9 @@ import { QuestionGroupService } from 'src/question-group/question-group.service'
 import { TagService } from 'src/tag/tag.service';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
+import { QuestionUpdateDto } from '../question-report/dto/resolve-question-report.dto';
+import { Test } from 'src/entities/test.entity';
+import { ETestStatus } from 'src/enums/ETestStatus.enum';
 
 @Injectable()
 export class QuestionService {
@@ -21,6 +24,8 @@ export class QuestionService {
     private readonly questionGroupService: QuestionGroupService,
     private readonly tagService: TagService,
     private readonly questionMapper: QuestionMapper,
+    @InjectRepository(Test)
+    private testRepository: Repository<Test>,
   ) {}
   /**
    * Corresponds to: questionService.getQuestionById(id)
@@ -86,6 +91,8 @@ export class QuestionService {
 
     // 5. Save the question
     await this.questionRepository.save(question);
+
+    await this.changeTestStatusToPending(question.questionGroup.test);
   }
 
   async createQuestion(
@@ -135,5 +142,40 @@ export class QuestionService {
     }
 
     return questions;
+  }
+
+  async updateQuestionFromReport(dto: QuestionUpdateDto): Promise<void> {
+    const question = await this.questionRepository.findOne({
+      where: { id: dto.id },
+      relations: ['questionGroup', 'questionGroup.test'],
+    });
+
+    if (!question)
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+
+    // 1. Update Basic Info
+    question.content = dto.content || question.content;
+    question.correctOption = dto.correctOption;
+    question.explanation = dto.explanation;
+    if (dto.options) question.options = dto.options;
+
+    // 2. Update Tags (Logic tương đương tagService.parseTagsAllowCreate)
+    if (dto.tags) {
+      // Giả sử logic parse tag nằm bên TagService
+      const tags = await this.tagService.getTagsFromString(dto.tags);
+      question.tags = tags;
+    }
+
+    await this.questionRepository.save(question);
+
+    // 3. Update Test Status (Async logic)
+    await this.changeTestStatusToPending(question.questionGroup.test);
+  }
+
+  private async changeTestStatusToPending(test: Test) {
+    if (test && test.status !== ETestStatus.PENDING) {
+      test.status = ETestStatus.PENDING;
+      await this.testRepository.save(test);
+    }
   }
 }
