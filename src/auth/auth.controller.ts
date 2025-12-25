@@ -196,22 +196,16 @@ export class AuthController {
     }
 
     try {
-      // Get account by refresh token to extract email
-      const account =
-        await this.authService.getAccountByRefreshToken(refreshToken);
-      if (!account) {
-        throw new AppException(ErrorCode.UNAUTHENTICATED);
-      }
-
+      // Get refresh token response
       const refreshTokenResponse = await this.authService.refreshToken(
         refreshToken,
-        account.email,
       );
 
-      // Create new refresh token
-      const newRefreshToken = await this.authService.createRefreshToken(
-        account.email,
-      );
+      // Create new refresh token from old refresh token
+      const newRefreshToken =
+        await this.authService.createRefreshTokenWithRefreshToken(
+          refreshToken,
+        );
       const refreshTokenExpirationTime =
         this.authService.getRefreshTokenDurationMs();
 
@@ -225,7 +219,10 @@ export class AuthController {
       });
 
       return refreshTokenResponse;
-    } catch {
+    } catch (error) {
+      if (error instanceof AppException) {
+        throw error;
+      }
       throw new AppException(ErrorCode.TOKEN_EXPIRED);
     }
   }

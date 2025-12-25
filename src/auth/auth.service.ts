@@ -29,7 +29,9 @@ import * as crypto from 'crypto';
 
 const CACHE_REGISTRATION = 'cacheRegistration';
 const CACHE_FULLNAME_REGISTRATION = 'cacheRegistrationFullName';
+const CACHE_LIMIT_VERIFY_OTP = 'cacheLimitVerifyOtp';
 const CACHE_REGISTRATION_TTL = 12 * 60 * 60 * 1000; // 12 hours
+const MAX_VERIFY_OTP_TIMES = 15;
 
 @Injectable()
 export class AuthService {
@@ -329,7 +331,11 @@ export class AuthService {
 
     await this.sendVerificationEmail(email, verificationCode);
 
-    // 7. Save data (to cache or DB)
+    // 7. Set cache limit verify OTP
+    const cacheLimitKey = `${CACHE_LIMIT_VERIFY_OTP}::${email}`;
+    await this.cacheManager.set(cacheLimitKey, 0, 5 * 60 * 1000); // 5 minutes TTL
+
+    // 8. Save data (to cache or DB)
     await this.saveTempAccount(isRegistering, email, accountData);
 
     return 'Verification code sent';
@@ -403,6 +409,10 @@ export class AuthService {
     await this.userService.saveAccount(account);
     await this.sendVerificationEmail(email, verificationCode);
 
+    // Set cache limit verify OTP
+    const cacheKey = `${CACHE_LIMIT_VERIFY_OTP}::${email}`;
+    await this.cacheManager.set(cacheKey, 0, 5 * 60 * 1000); // 5 minutes TTL
+
     return 'Verification code sent';
   }
 
@@ -415,6 +425,17 @@ export class AuthService {
     }
 
     if (!account.verificationCode || account.verificationCode !== otp) {
+      // Track failed OTP attempts in cache
+      const cacheKey = `${CACHE_LIMIT_VERIFY_OTP}::${email}`;
+      const times = ((await this.cacheManager.get(cacheKey)) as number) || 0;
+      const newTimes = times + 1;
+
+      if (newTimes > MAX_VERIFY_OTP_TIMES) {
+        throw new AppException(ErrorCode.OTP_LIMIT_EXCEEDED, String(MAX_VERIFY_OTP_TIMES));
+      }
+
+      // Store updated count in cache (5 minutes TTL)
+      await this.cacheManager.set(cacheKey, newTimes, 5 * 60 * 1000);
       throw new AppException(ErrorCode.INVALID_OTP, "User's");
     }
 
@@ -425,7 +446,9 @@ export class AuthService {
       throw new AppException(ErrorCode.OTP_EXPIRED);
     }
 
-    // Clear OTP after verification
+    // Clear OTP after verification and remove cache limit
+    const cacheKey = `${CACHE_LIMIT_VERIFY_OTP}::${email}`;
+    await this.cacheManager.del(cacheKey);
     account.verificationCode = undefined;
     account.verificationCodeExpiresAt = undefined;
     await this.userService.saveAccount(account);
@@ -555,6 +578,27 @@ export class AuthService {
     return refreshToken;
   }
 
+  async createRefreshTokenWithRefreshToken(
+    refreshToken: string,
+  ): Promise<string> {
+    const account = await this.userService.findAccountByRefreshToken(
+      refreshToken,
+    );
+    if (!account) {
+      throw new AppException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    // Create new refresh token
+    const newRefreshToken = crypto.randomUUID();
+    account.refreshToken = newRefreshToken;
+    account.refreshTokenExpiryDate = new Date(
+      Date.now() + this.refreshTokenDurationMs,
+    );
+
+    await this.userService.saveAccount(account);
+    return newRefreshToken;
+  }
+
   async getAccountByRefreshToken(
     refreshToken: string,
   ): Promise<Account | null> {
@@ -572,18 +616,15 @@ export class AuthService {
     return account;
   }
 
-  async refreshToken(
-    refreshToken: string,
-    email: string,
-  ): Promise<RefreshTokenResponse> {
-    const account = await this.userService.findOneByEmail(email);
+  async refreshToken(refreshToken: string): Promise<RefreshTokenResponse> {
+    const account = await this.userService.findAccountByRefreshToken(
+      refreshToken,
+    );
     if (!account) {
       throw new AppException(ErrorCode.UNAUTHENTICATED);
     }
 
     if (
-      !account.refreshToken ||
-      account.refreshToken !== refreshToken ||
       !account.refreshTokenExpiryDate ||
       account.refreshTokenExpiryDate < new Date()
     ) {

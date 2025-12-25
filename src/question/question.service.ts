@@ -136,4 +136,19 @@ export class QuestionService {
 
     return questions;
   }
+
+  async findAllQuestionByIdWithTags(
+    questionIds: Set<number>,
+  ): Promise<Question[]> {
+    if (!questionIds || questionIds.size === 0) {
+      return [];
+    }
+
+    return this.questionRepository.find({
+      where: {
+        id: In([...questionIds]),
+      },
+      relations: ['tags'],
+    });
+  }
 }

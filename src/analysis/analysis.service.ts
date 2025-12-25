@@ -15,6 +15,7 @@ import { UserAnswerGroupedByTagResponse } from './dto/user-answer-grouped-by-tag
 import { PageResponse, PageMeta } from 'src/test-set/dto/page-response.dto';
 import { IAnalysisService } from './analysis.service.interface';
 import { QuestionGroupService } from 'src/question-group/question-group.service';
+import { QuestionService } from 'src/question/question.service';
 import { formatInTimeZone } from 'date-fns-tz';
 import {
   DATE_TIME_PATTERN,
@@ -37,11 +38,8 @@ export class AnalysisService implements IAnalysisService {
   constructor(
     @InjectRepository(UserTest)
     private readonly userTestRepository: Repository<UserTest>,
-    @InjectRepository(UserAnswer)
-    private readonly userAnswerRepository: Repository<UserAnswer>,
-    @InjectRepository(Question)
-    private readonly questionRepository: Repository<Question>,
     private readonly questionGroupService: QuestionGroupService,
+    private readonly questionService: QuestionService,
   ) {}
 
   async getAllTestHistory(
@@ -241,7 +239,6 @@ export class AnalysisService implements IAnalysisService {
         )
       : new Date(Date.now() - daysValue * 24 * 60 * 60 * 1000);
 
-    // Find all user tests with relations
     const userTests = await this.userTestRepository
       .createQueryBuilder('ut')
       .innerJoin('ut.user', 'u')
@@ -249,9 +246,11 @@ export class AnalysisService implements IAnalysisService {
       .leftJoinAndSelect('ut.test', 't')
       .leftJoinAndSelect('ut.userAnswers', 'ua')
       .leftJoinAndSelect('ua.question', 'q')
-      .leftJoinAndSelect('q.tags', 'tag')
+      .leftJoinAndSelect('q.questionGroup', 'qg')
+      .leftJoinAndSelect('qg.part', 'p')
       .where('a.email = :email', { email })
       .andWhere('ut.createdAt >= :startDate', { startDate })
+      .andWhere('t.status = :status', { status: ETestStatus.APPROVED })
       .getMany();
 
     // Count distinct tests
@@ -261,6 +260,42 @@ export class AnalysisService implements IAnalysisService {
         .filter((id): id is number => id != null),
     );
     const numberOfTests = distinctTestIds.size;
+
+    const questionIds = new Set<number>();
+    userTests.forEach((ut) => {
+      if (ut.userAnswers && ut.userAnswers.length > 0) {
+        ut.userAnswers.forEach((ua) => {
+          if (ua.question?.id) {
+            questionIds.add(ua.question.id);
+          }
+        });
+      }
+    });
+
+    // Load questions with tags
+    const questionMapWithTags = new Map<number, Question>();
+    if (questionIds.size > 0) {
+      const questionsWithTags =
+        await this.questionService.findAllQuestionByIdWithTags(questionIds);
+      questionsWithTags.forEach((q) => {
+        questionMapWithTags.set(q.id, q);
+      });
+    }
+
+    userTests.forEach((ut) => {
+      if (ut.userAnswers && ut.userAnswers.length > 0) {
+        ut.userAnswers.forEach((userAnswer) => {
+          if (userAnswer.question?.id) {
+            const questionWithTags = questionMapWithTags.get(
+              userAnswer.question.id,
+            );
+            if (questionWithTags && questionWithTags.tags) {
+              userAnswer.question.tags = questionWithTags.tags;
+            }
+          }
+        });
+      }
+    });
 
     // Initialize tracking variables
     const listeningData = new Map<string, Map<string, TagStats>>();
