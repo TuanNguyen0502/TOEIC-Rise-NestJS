@@ -19,6 +19,7 @@ import { UserAnswersModule } from './user-answer/user-answers.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { QuestionGroupModule } from './question-group/question-group.module';
 import { PartModule } from './part/part.module';
+import { QuestionReportModule } from './question-report/question-report.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { PartModule } from './part/part.module';
     UserTestModule,
     UserAnswersModule,
     AnalysisModule,
+    QuestionReportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
