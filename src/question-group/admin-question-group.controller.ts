@@ -19,7 +19,7 @@ import { QuestionGroupUpdateRequestDto } from './dto/question-group-update-reque
 
 @Controller('admin/question-groups')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(ERole.ADMIN) // Chỉ ADMIN mới truy cập được
+@Roles(ERole.ADMIN)
 export class AdminQuestionGroupController {
   constructor(private readonly questionGroupService: QuestionGroupService) {}
 

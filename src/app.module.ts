@@ -20,6 +20,8 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { QuestionGroupModule } from './question-group/question-group.module';
 import { PartModule } from './part/part.module';
 import { TagModule } from './tag/tag.module';
+import { QuestionReportModule } from './question-report/question-report.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -86,6 +88,8 @@ import { TagModule } from './tag/tag.module';
     UserAnswersModule,
     AnalysisModule,
     TagModule,
+    QuestionReportModule,
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [AppService],
