@@ -1,4 +1,10 @@
-import { IsEnum, IsNotEmpty, IsNumber, Matches } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Matches,
+} from 'class-validator';
 import { ETestSetStatus } from 'src/enums/ETestSetStatus.enum';
 import { TEST_SET_NAME_PATTERN } from 'src/common/constants/constants';
 import { MessageConstant } from 'src/common/constants/messages.constant';
@@ -10,8 +16,9 @@ export class UpdateTestSetRequestDto {
   @IsNotEmpty()
   testName: string;
 
+  @IsOptional()
   @IsEnum(ETestSetStatus)
-  status: ETestSetStatus;
+  status?: ETestSetStatus;
 
   @IsNumber()
   id: number;

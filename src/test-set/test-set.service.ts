@@ -48,8 +48,8 @@ export class TestSetService {
 
     const where: FindManyOptions<TestSet>['where'] = {};
 
-    if (name) {
-      where.name = Like(`%${name}%`);
+    if (name && name.trim().length > 0) {
+      where.name = Like(`%${name.trim()}%`);
     }
 
     where.status = status ?? ETestSetStatus.IN_USE;
@@ -100,8 +100,6 @@ export class TestSetService {
     const testSet = this.testSetRepository.create({
       name: createTestSetRequest.testName,
       status: ETestSetStatus.IN_USE,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     });
 
     await this.testSetRepository.save(testSet);
@@ -145,7 +143,21 @@ export class TestSetService {
     }
 
     oldTestSet.name = updateTestSetRequest.testName;
-    oldTestSet.status = updateTestSetRequest.status;
+
+    if (
+      updateTestSetRequest.status != null &&
+      oldTestSet.status !== updateTestSetRequest.status
+    ) {
+      if (updateTestSetRequest.status === ETestSetStatus.DELETED) {
+        await this.testService.deleteTestsByTestSetId(oldTestSet.id);
+      }
+      if (updateTestSetRequest.status === ETestSetStatus.IN_USE) {
+        await this.testService.changeTestsStatusToPendingByTestSetId(
+          oldTestSet.id,
+        );
+      }
+      oldTestSet.status = updateTestSetRequest.status;
+    }
 
     await this.testSetRepository.save(oldTestSet);
 

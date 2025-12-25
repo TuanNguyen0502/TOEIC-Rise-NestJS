@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   UploadedFile,
   Body,
   UseInterceptors,
@@ -19,13 +20,14 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TestRequestDto } from './dto/test-request.dto';
+import { TestUpdateRequestDto } from './dto/test-update-request.dto';
 import { ParseAndValidateJsonPipe } from 'src/common/pipes/parse-and-validate-json.pipe';
 
 @ApiTags('staff/tests')
 @ApiBearerAuth('JWT') // For Swagger UI
 @Controller('staff/tests')
 @UseGuards(JwtAuthGuard, RolesGuard) // Apply JWT auth and Roles guard
-@Roles(ERole.ADMIN, ERole.STAFF) // Specify that ONLY ADMIN can access
+@Roles(ERole.ADMIN, ERole.STAFF) // Specify that ADMIN and STAFF can access
 export class StaffTestController {
   constructor(private readonly testService: TestService) {}
 
@@ -44,9 +46,17 @@ export class StaffTestController {
   async importTests(
     @UploadedFile() file: Express.Multer.File,
     @Body('testRequest', new ParseAndValidateJsonPipe(TestRequestDto))
-    testRequest: any,
+    testRequest: TestRequestDto,
   ) {
     await this.testService.importTest(file, testRequest);
     return { message: 'Test imported' };
+  }
+
+  @Put(':id')
+  async updateTest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() testUpdateRequest: TestUpdateRequestDto,
+  ) {
+    return this.testService.updateTest(id, testUpdateRequest);
   }
 }

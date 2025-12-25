@@ -1,25 +1,19 @@
 import {
   Controller,
-  Get,
-  Post,
-  UploadedFile,
-  Body,
-  UseInterceptors,
+  UseGuards,
+  Patch,
   Param,
   ParseIntPipe,
   Query,
-  UseGuards,
+  ParseEnumPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { TestService } from './test.service';
-import { GetTestsAdminDto } from './dto/get-tests-admin.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { TestRequestDto } from './dto/test-request.dto';
-import { ParseAndValidateJsonPipe } from 'src/common/pipes/parse-and-validate-json.pipe';
+import { ETestStatus } from 'src/enums/ETestStatus.enum';
 
 @ApiTags('admin/tests')
 @ApiBearerAuth('JWT') // For Swagger UI
@@ -28,4 +22,13 @@ import { ParseAndValidateJsonPipe } from 'src/common/pipes/parse-and-validate-js
 @Roles(ERole.ADMIN) // Specify that ONLY ADMIN can access
 export class AdminTestController {
   constructor(private readonly testService: TestService) {}
+
+  @Patch(':id')
+  async changeStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('status', new ParseEnumPipe(ETestStatus)) status: ETestStatus,
+  ): Promise<{ success: boolean }> {
+    const result = await this.testService.changeTestStatusById(id, status);
+    return { success: result };
+  }
 }

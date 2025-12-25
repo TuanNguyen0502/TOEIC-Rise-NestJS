@@ -40,7 +40,7 @@ export class AdminTestSetController {
     @Query() query: GetTestSetDetailQueryDto,
   ) {
     return this.testSetService.getTestSetDetailById(id, query);
-}
+  }
 
   @Post()
   async createTestSet(@Body() createTestSetRequest: CreateTestSetRequestDto) {

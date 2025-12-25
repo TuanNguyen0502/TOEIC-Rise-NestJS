@@ -297,7 +297,15 @@ export class TestService {
 
     const testSet = await this.testSetService.getTestSet(request.testSetId);
     if (!testSet) {
-      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test set');
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test Set');
+    }
+
+    const existingTest = await this.testRepository.findOne({
+      where: { name: request.testName },
+    });
+
+    if (existingTest) {
+      throw new AppException(ErrorCode.RESOURCE_ALREADY_EXISTS, "Test's name");
     }
 
     const test = await this.createTest(
@@ -490,6 +498,84 @@ export class TestService {
         total,
       },
       result: testResponses,
+    };
+  }
+
+  async changeTestsStatusToPendingByTestSetId(
+    testSetId: number,
+  ): Promise<void> {
+    const tests = await this.testRepository.find({
+      where: { testSet: { id: testSetId } },
+    });
+
+    if (!tests.length) return;
+
+    for (const test of tests) {
+      test.status = ETestStatus.PENDING;
+    }
+
+    await this.testRepository.save(tests);
+  }
+
+  async changeTestStatusById(
+    id: number,
+    status: ETestStatus,
+  ): Promise<boolean> {
+    const test = await this.testRepository.findOne({
+      where: { id },
+    });
+
+    if (!test) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
+    }
+
+    test.status = status;
+    await this.testRepository.save(test);
+
+    return true;
+  }
+
+  async updateTest(
+    id: number,
+    testUpdateRequest: { name: string },
+  ): Promise<{
+    id: number;
+    name: string;
+    status: ETestStatus;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
+    // Validate test ID
+    const existingTest = await this.testRepository.findOne({
+      where: { id },
+    });
+
+    if (!existingTest) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
+    }
+
+    // Check for name uniqueness
+    const testWithSameName = await this.testRepository.findOne({
+      where: { name: testUpdateRequest.name },
+    });
+
+    if (testWithSameName && testWithSameName.id !== existingTest.id) {
+      throw new AppException(ErrorCode.RESOURCE_ALREADY_EXISTS, "Test's name");
+    }
+
+    // Update fields
+    existingTest.name = testUpdateRequest.name;
+    existingTest.status = ETestStatus.PENDING;
+
+    const updatedTest = await this.testRepository.save(existingTest);
+
+    // Return TestResponse format
+    return {
+      id: updatedTest.id,
+      name: updatedTest.name,
+      status: updatedTest.status,
+      createdAt: updatedTest.createdAt,
+      updatedAt: updatedTest.updatedAt,
     };
   }
 }
