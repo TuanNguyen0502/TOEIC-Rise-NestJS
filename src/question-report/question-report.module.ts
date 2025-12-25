@@ -5,13 +5,14 @@ import { AuthModule } from 'src/auth/auth.module';
 import { QuestionReport } from 'src/entities/question-report.entity';
 import { QuestionReportService } from './question-report.service';
 import { AdminQuestionReportController } from './admin-question-report.controller';
+import { StaffQuestionReportController } from './staff-question-report.controller';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([QuestionReport]),
     forwardRef(() => AuthModule),
   ],
-  controllers: [AdminQuestionReportController],
+  controllers: [AdminQuestionReportController, StaffQuestionReportController],
   providers: [QuestionReportService],
   exports: [QuestionReportService],
 })
