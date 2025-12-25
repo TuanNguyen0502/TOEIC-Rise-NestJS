@@ -4,7 +4,6 @@ import {
   type UploadApiResponse,
   type UploadApiErrorResponse,
 } from 'cloudinary';
-import { MessageConstant } from 'src/common/constants/messages.constant';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
 
@@ -13,8 +12,16 @@ export class CloudinaryService {
   constructor(@Inject('CLOUDINARY') private cloudinary: typeof Cloudinary) {}
 
   async uploadFile(file: Express.Multer.File): Promise<string> {
-    const resourceType = this.getResourceType(file.originalname);
-    return this.uploadBuffer(file.buffer, file.originalname, resourceType);
+    try {
+      const resourceType = this.getResourceType(file.originalname);
+      return await this.uploadBuffer(
+        file.buffer,
+        file.originalname,
+        resourceType,
+      );
+    } catch {
+      throw new AppException(ErrorCode.UPLOAD_FAILED);
+    }
   }
 
   async uploadBuffer(
@@ -38,11 +45,12 @@ export class CloudinaryService {
           err: UploadApiErrorResponse | undefined,
           res: UploadApiResponse | undefined,
         ) => {
-          if (err)
-            return reject(
-              new Error(err.message || MessageConstant.CLOUDINARY_ERROR),
-            );
-          if (!res) return reject(new Error('Empty Cloudinary response'));
+          if (err) {
+            return reject(new AppException(ErrorCode.UPLOAD_FAILED));
+          }
+          if (!res) {
+            return reject(new AppException(ErrorCode.UPLOAD_FAILED));
+          }
           return resolve(res.secure_url);
         },
       );
@@ -61,8 +69,6 @@ export class CloudinaryService {
 
   async deleteFile(url: string): Promise<void> {
     try {
-      if (!this.isCloudinaryUrl(url)) return;
-
       const publicId = this.extractPublicId(url);
       const resourceType = this.getResourceTypeFromUrl(url);
 
@@ -71,14 +77,8 @@ export class CloudinaryService {
           resource_type: resourceType,
         });
       }
-    } catch (error) {
-      // Bên Java ném lỗi, nhưng thường xóa file media phụ không nên chặn luồng chính
-      // Tuy nhiên để giống Java, ta throw exception
-      console.error('Delete file error:', error);
-      throw new AppException(
-        ErrorCode.FILE_DELETE_FAILED,
-        'File delete failed',
-      );
+    } catch {
+      throw new AppException(ErrorCode.FILE_DELETE_FAILED);
     }
   }
 
@@ -147,18 +147,15 @@ export class CloudinaryService {
   }
 
   private extractPublicId(url: string): string | null {
-    if (!url) return null;
-    // URL mẫu: https://res.cloudinary.com/demo/image/upload/v1234567/folder/filename.jpg
+    if (!url || url.length === 0) return null;
+    // URL: https://res.cloudinary.com/your_cloud/image/upload/v1234567890/filename.jpg
 
-    try {
-      const regex = /\/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/;
-      const match = url.match(regex);
-      return match ? match[1] : null;
-      // Logic regex này an toàn hơn split('/') của Java một chút
-      // vì nó xử lý được cả trường hợp có hoặc không có version (v12345)
-    } catch (e) {
-      return null;
-    }
+    const parts = url.split('/');
+    if (parts.length < 2) return null; // Invalid URL
+
+    const filename = parts[parts.length - 1]; // filename.jpg
+    // Remove file extension
+    return filename.includes('.') ? filename.split('.')[0] : filename;
   }
 
   validateImageName(name?: string) {

@@ -1,18 +1,19 @@
 import {
   IsInt,
   IsNotEmpty,
-  IsObject,
   IsOptional,
   IsString,
+  IsArray,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { MessageConstant } from 'src/common/constants/messages.constant';
 
 export class QuestionRequestDto {
-  @IsInt()
+  @IsInt({ message: MessageConstant.QUESTION_ID_NOT_NULL })
   @IsNotEmpty({ message: MessageConstant.QUESTION_ID_NOT_NULL })
   id: number;
 
-  @IsInt()
+  @IsInt({ message: MessageConstant.QUESTION_GROUP_ID_NOT_NULL })
   @IsNotEmpty({ message: MessageConstant.QUESTION_GROUP_ID_NOT_NULL })
   questionGroupId: number;
 
@@ -21,15 +22,29 @@ export class QuestionRequestDto {
   content?: string;
 
   @IsOptional()
-  @IsObject()
-  options?: Record<string, string>;
+  @Transform(({ value }) => {
+    if (value === null || value === undefined) {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item));
+    }
+    if (typeof value === 'object' && value.constructor === Object) {
+      // Transform object to array format: { A: "text", B: "text" } -> ["A:text", "B:text"]
+      return Object.keys(value).map((key) => `${key}:${value[key]}`);
+    }
+    return value;
+  })
+  @IsArray({ message: 'Options must be an array' })
+  @IsString({ each: true, message: 'Each option must be a string' })
+  options?: string[];
 
   @IsString()
-  @IsNotEmpty({ message: MessageConstant.CORRECT_OPTION_NOT_BLANK })
+  @IsNotEmpty({ message: MessageConstant.QUESTION_CORRECT_OPTION_NOT_BLANK })
   correctOption: string;
 
   @IsString()
-  @IsNotEmpty({ message: MessageConstant.EXPLAIN_NOT_BLANK })
+  @IsNotEmpty({ message: MessageConstant.QUESTION_EXPLANATION_NOT_BLANK })
   explanation: string;
 
   @IsString()
