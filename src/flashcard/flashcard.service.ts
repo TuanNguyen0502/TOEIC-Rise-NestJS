@@ -157,4 +157,61 @@ export class FlashcardService {
       result: flashcards,
     };
   }
+
+  async getAllMyFavouriteFlashcards(
+    email: string,
+    name: string | null,
+    page: number,
+    size: number,
+    sortBy: string,
+    direction: string,
+  ) {
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+
+    if (!user) {
+      throw new AppException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    const query = this.flashcardRepository
+      .createQueryBuilder('f')
+      .innerJoin(
+        'flashcard_favourites',
+        'fav',
+        'f.id = fav.flashcard_id AND fav.user_id = :userId',
+        { userId: user.id },
+      )
+      .leftJoinAndSelect('f.user', 'user')
+      .leftJoinAndSelect('f.items', 'items')
+      .addSelect('true', 'isFavourite');
+
+    if (name) {
+      query.andWhere('LOWER(f.name) LIKE LOWER(:name)', {
+        name: `%${name}%`,
+      });
+    }
+
+    query
+      .orderBy(`f.${sortBy}`, direction as 'ASC' | 'DESC')
+      .skip(page * size)
+      .take(size);
+
+    const [results, total] = await query.getManyAndCount();
+
+    const flashcards = results.map((flashcard) => {
+      return this.flashcardMapper.toFlashcardPublicResponse(flashcard, true);
+    });
+
+    return {
+      meta: {
+        page,
+        pageSize: size,
+        pages: Math.ceil(total / size),
+        total,
+      },
+      result: flashcards,
+    };
+  }
 }
