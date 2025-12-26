@@ -40,6 +40,7 @@ export const MessageConstant = {
   SYSTEM_PROMPT_CONTENT_INVALID:
     'Content must be at least 20 characters and can only contain letters, digits, spaces, and punctuation (.,!?()\'"-)',
   SYSTEM_PROMPT_CONTENT_NOT_NULL: 'Content must not be null',
+  SYSTEM_PROMPT_CONTENT_MIN_LENGTH: 'Content must be at least 20 characters',
   SYSTEM_PROMPT_IS_ACTIVE_NOT_NULL: 'isActive must not be null',
 
   // Chatbot messages

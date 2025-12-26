@@ -29,12 +29,6 @@ import { TransformOptionsPipe } from './pipes/transform-options.pipe';
 export class AdminQuestionController {
   constructor(private readonly questionService: QuestionService) {}
 
-  /**
-   * Corresponds to:
-   * @PutMapping("")
-   * public ResponseEntity<?> updateQuestion(...)
-   * [ADMIN role required]
-   */
   @Put()
   @HttpCode(HttpStatus.OK) // Corresponds to ResponseEntity.ok()
   @UsePipes(TransformOptionsPipe, QuestionByPartValidationPipe) // Transform options first, then validate
@@ -43,12 +37,6 @@ export class AdminQuestionController {
     return { message: 'Update question updated successfully' };
   }
 
-  /**
-   * Corresponds to:
-   * @GetMapping("/{id}")
-   * public ResponseEntity<?> getQuestionById(@PathVariable Long id)
-   * [ADMIN role required]
-   */
   @Get(':id')
   async getQuestionById(
     @Param('id', ParseIntPipe) id: number,

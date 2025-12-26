@@ -24,6 +24,7 @@ import { QuestionReportModule } from './question-report/question-report.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { StatisticModule } from './statistic/statistic.module';
 import { FlashcardModule } from './flashcard/flashcard.module';
+import { SystemPromptModule } from './system-prompt/system-prompt.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { FlashcardModule } from './flashcard/flashcard.module';
     ChatbotModule,
     StatisticModule,
     FlashcardModule,
+    SystemPromptModule,
   ],
   controllers: [AppController],
   providers: [AppService],
