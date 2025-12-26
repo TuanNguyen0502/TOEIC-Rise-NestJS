@@ -3,6 +3,11 @@ import {
   Get,
   Query,
   UseGuards,
+  Post,
+  Param,
+  ParseIntPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FlashcardService } from './flashcard.service';
@@ -71,5 +76,15 @@ export class FlashcardController {
       sortBy,
       direction,
     );
+  }
+
+  @Post('favourite/:flashcardId')
+  @HttpCode(HttpStatus.OK)
+  async addFlashcardToFavourite(
+    @Param('flashcardId', ParseIntPipe) flashcardId: number,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    await this.flashcardService.addFavourite(email, flashcardId);
+    return { message: 'Added to favourites' };
   }
 }

@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Flashcard } from 'src/entities/flashcard.entity';
 import { User } from 'src/entities/user.entity';
+import { FlashcardFavourite } from 'src/entities/flashcard-favourite.entity';
 import { EAccessType } from 'src/enums/EAccessType.enum';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
@@ -15,6 +16,8 @@ export class FlashcardService {
     private readonly flashcardRepository: Repository<Flashcard>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(FlashcardFavourite)
+    private readonly flashcardFavouriteRepository: Repository<FlashcardFavourite>,
     private readonly flashcardMapper: FlashcardMapper,
   ) {}
 
@@ -40,21 +43,13 @@ export class FlashcardService {
       throw new AppException(ErrorCode.UNAUTHENTICATED);
     }
 
-    // Build query
+    console.log('Current user ID:', user.id);
+
+    // Step 1: Query flashcards normally
     const query = this.flashcardRepository
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.user', 'user')
       .leftJoinAndSelect('f.items', 'items')
-      .leftJoin(
-        'flashcard_favourites',
-        'fav',
-        'f.id = fav.flashcard_id AND fav.user_id = :userId',
-        { userId: user.id },
-      )
-      .addSelect(
-        'CASE WHEN fav.id IS NOT NULL THEN true ELSE false END',
-        'isFavourite',
-      )
       .where('f.access_type = :accessType', { accessType: EAccessType.PUBLIC });
 
     if (name) {
@@ -70,9 +65,29 @@ export class FlashcardService {
 
     const [results, total] = await query.getManyAndCount();
 
-    // Map results
+    // Step 2: Get flashcard IDs from results
+    const flashcardIds = results.map((f) => f.id);
+
+    // Step 3: Query user's favourites for these flashcards
+    const userFavourites = await this.flashcardFavouriteRepository.find({
+      where: {
+        user: { id: user.id },
+        flashcard: { id: flashcardIds.length > 0 ? In(flashcardIds) : In([]) },
+      },
+      relations: ['flashcard'],
+    });
+
+    console.log('User favourites found:', userFavourites.length);
+    console.log('Favourite flashcard IDs:', userFavourites.map(f => f.flashcard.id));
+
+    // Step 4: Create set of favourite IDs for O(1) lookup
+    const favouriteIds = new Set(userFavourites.map((f) => f.flashcard.id));
+
+    console.log('Favourite IDs set:', Array.from(favouriteIds));
+
+    // Step 5: Map results with isFavourite flag
     const flashcards = results.map((flashcard) => {
-      const isFavourite = (flashcard as any).isFavourite === 'true' || false;
+      const isFavourite = favouriteIds.has(flashcard.id);
       return this.flashcardMapper.toFlashcardPublicResponse(
         flashcard,
         isFavourite,
@@ -108,21 +123,11 @@ export class FlashcardService {
       throw new AppException(ErrorCode.UNAUTHENTICATED);
     }
 
-    // Build query for user's flashcards
+    // Step 1: Query user's flashcards normally
     const query = this.flashcardRepository
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.user', 'user')
       .leftJoinAndSelect('f.items', 'items')
-      .leftJoin(
-        'flashcard_favourites',
-        'fav',
-        'f.id = fav.flashcard_id AND fav.user_id = :userId',
-        { userId: user.id },
-      )
-      .addSelect(
-        'CASE WHEN fav.id IS NOT NULL THEN true ELSE false END',
-        'isFavourite',
-      )
       .where('f.user_id = :userId', { userId: user.id });
 
     if (name) {
@@ -138,9 +143,22 @@ export class FlashcardService {
 
     const [results, total] = await query.getManyAndCount();
 
-    // Map results
+    // Step 2: Get flashcard IDs from results
+    const flashcardIds = results.map((f) => f.id);
+
+    // Step 3: Query user's favourites for these flashcards
+    const userFavourites = await this.flashcardFavouriteRepository.find({
+      where: {
+        user: { id: user.id },
+        flashcard: { id: flashcardIds.length > 0 ? In(flashcardIds) : In([]) },
+      },
+      relations: ['flashcard'],
+    });
+
+    const favouriteIds = new Set(userFavourites.map((f) => f.flashcard.id));
+
     const flashcards = results.map((flashcard) => {
-      const isFavourite = (flashcard as any).isFavourite === 'true' || false;
+      const isFavourite = favouriteIds.has(flashcard.id);
       return this.flashcardMapper.toFlashcardPublicResponse(
         flashcard,
         isFavourite,
@@ -213,5 +231,50 @@ export class FlashcardService {
       },
       result: flashcards,
     };
+  }
+
+  async addFavourite(email: string, flashcardId: number): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+    }
+
+    const flashcard = await this.flashcardRepository.findOne({
+      where: { id: flashcardId },
+      relations: ['user'],
+    });
+    if (!flashcard) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    if (
+      flashcard.accessType !== EAccessType.PUBLIC &&
+      flashcard.user.id !== user.id
+    ) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    // Check if already favourite
+    const exists = await this.flashcardFavouriteRepository.findOne({
+      where: { user: { id: user.id }, flashcard: { id: flashcardId } },
+    });
+    if (exists) {
+      throw new AppException(
+        ErrorCode.RESOURCE_ALREADY_EXISTS,
+        'Flashcard favourite',
+      );
+    }
+
+    flashcard.favouriteCount += 1;
+    await this.flashcardRepository.save(flashcard);
+
+    const favourite = this.flashcardFavouriteRepository.create({
+      user,
+      flashcard,
+    });
+    await this.flashcardFavouriteRepository.save(favourite);
   }
 }
