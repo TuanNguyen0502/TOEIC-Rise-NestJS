@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { StatisticService } from './statistic.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
+import { StaffStatisticController } from './staff-statistic.controller';
 import { UserModule } from 'src/user/user.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { TestSetModule } from 'src/test-set/test-set.module';
@@ -21,7 +22,7 @@ import { FlashcardModule } from 'src/flashcard/flashcard.module';
     QuestionReportModule,
     FlashcardModule,
   ],
-  controllers: [AdminDashboardController],
+  controllers: [AdminDashboardController, StaffStatisticController],
   providers: [StatisticService],
   exports: [StatisticService],
 })
