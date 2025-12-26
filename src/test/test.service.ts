@@ -1,6 +1,6 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, Not } from 'typeorm';
+import { Repository, FindManyOptions, Like, Not, In } from 'typeorm';
 import { Test } from '../entities/test.entity';
 import { Part } from '../entities/part.entity';
 import { QuestionGroup } from '../entities/question-group.entity';
@@ -51,17 +51,9 @@ export class TestService {
     private readonly testExcelMapper: TestExcelMapper,
   ) {}
 
-  /**
-   * Corresponds to: testService.searchTestsByName(pageRequest)
-   *
-   * This implements the logic from TestServiceImpl.java:
-   * - Filters by name (if provided)
-   * - Filters by status: APPROVED
-   * - Filters by testSet status: IN_USE
-   * - Paginates results
-   */
+
   async searchTestsByName(dto: PageRequestDto) {
-    const { page, size, name } = dto;
+    const { page, size, name, sort } = dto;
 
     const whereOptions: FindManyOptions<Test>['where'] = {
       status: ETestStatus.APPROVED,
@@ -69,6 +61,21 @@ export class TestService {
         status: ETestSetStatus.IN_USE,
       },
     };
+
+
+    if (sort) {
+      const testSetIds = sort
+        .split(',')
+        .map((id) => parseInt(id.trim(), 10))
+        .filter((id) => !isNaN(id));
+      
+      if (testSetIds.length > 0) {
+        whereOptions.testSet = {
+          status: ETestSetStatus.IN_USE,
+          id: In(testSetIds),
+        };
+      }
+    }
 
     if (name) {
       whereOptions.name = Like(`%${name}%`);
@@ -102,35 +109,32 @@ export class TestService {
     };
   }
 
-  /**
-   * Corresponds to: testService.getLearnerTestDetailById(id)
-   *
-   * This translates the native SQL query from `TestRepository.java`
-   * (`findListTagByIdOrderByPartName`) into a TypeORM QueryBuilder.
-   */
+
   async getLearnerTestDetailById(
     id: number,
   ): Promise<LearnerTestDetailResponse> {
-    const testWithDetails = await this.testRepository
-      .createQueryBuilder('t')
-      .select([
-        't.id AS testId',
-        't.name AS testName',
-        't.numberOfLearnerTests AS numberOfLearnedTests',
-        'p.id AS partId',
-        'p.name AS partName',
-        // Use GROUP_CONCAT for aggregation, similar to the Java native query
-        'GROUP_CONCAT(DISTINCT tg.name ORDER BY tg.name SEPARATOR "; ") AS tagNames',
-      ])
-      .innerJoin('t.questionGroups', 'qg')
-      .innerJoin('qg.part', 'p')
-      .leftJoin('qg.questions', 'q')
-      .leftJoin('q.tags', 'tg')
-      .where('t.id = :id', { id })
-      .andWhere('t.status = :status', { status: ETestStatus.APPROVED })
-      .groupBy('t.id, t.name, t.numberOfLearnerTests, p.name, p.id')
-      .orderBy('p.id', 'ASC')
-      .getRawMany<LearnerTestRawRow>();
+    // Use native query to match Java implementation exactly
+    const testWithDetails = await this.testRepository.query(
+      `
+      SELECT 
+        t.id AS testId, 
+        t.name AS testName, 
+        t.number_of_learner_tests AS numberOfLearnedTests, 
+        p.name AS partName, 
+        p.id AS partId,
+        GROUP_CONCAT(DISTINCT tg.name ORDER BY tg.name SEPARATOR '; ') AS tagNames 
+      FROM tests t 
+      INNER JOIN question_groups qg ON qg.test_id = t.id 
+      INNER JOIN questions q ON q.question_group_id = qg.id 
+      INNER JOIN parts p ON qg.part_id = p.id 
+      LEFT JOIN questions_tags qtg ON qtg.question_id = q.id 
+      LEFT JOIN tags tg ON qtg.tag_id = tg.id 
+      WHERE t.id = ? AND t.status = 'APPROVED'
+      GROUP BY t.id, t.name, t.number_of_learner_tests, p.name, p.id 
+      ORDER BY p.id
+    `,
+      [id],
+    );
 
     if (!testWithDetails || testWithDetails.length === 0) {
       throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');

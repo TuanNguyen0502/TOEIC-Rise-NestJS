@@ -16,6 +16,9 @@ import { TestSet } from './entities/test-set.entity';
 import { User } from './entities/user.entity';
 import { UserAnswer } from './entities/user-answer.entity';
 import { UserTest } from './entities/user-test.entity';
+import { Flashcard } from './entities/flashcard.entity';
+import { FlashcardItem } from './entities/flashcard-item.entity';
+import { FlashcardFavourite } from './entities/flashcard-favourite.entity';
 
 dotenv.config();
 
@@ -43,6 +46,9 @@ export const AppDataSource = new DataSource({
     User,
     UserAnswer,
     UserTest,
+    Flashcard,
+    FlashcardItem,
+    FlashcardFavourite,
   ],
   migrations: ['src/migrations/*.ts'], // Path to your new migration files
   subscribers: [],

@@ -15,7 +15,6 @@ export class LearnerChatbotController {
   chatAboutQuestion(
     @Body() request: ChatAboutQuestionRequestDto,
   ): Observable<any> {
-
     return this.chatbotService
       .chatAboutQuestion(request)
       .pipe(map((data) => ({ data })));
