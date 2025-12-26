@@ -34,4 +34,23 @@ export class FlashcardController {
       direction,
     );
   }
+
+  @Get('my')
+  async getMyFlashcards(
+    @GetCurrentUserEmail() email: string,
+    @Query('name') name?: string,
+    @Query('page') page: number = 0,
+    @Query('size') size: number = 10,
+    @Query('sortBy') sortBy: string = 'favouriteCount',
+    @Query('direction') direction: string = 'DESC',
+  ) {
+    return this.flashcardService.getAllMyFlashcards(
+      email,
+      name || null,
+      page,
+      size,
+      sortBy,
+      direction,
+    );
+  }
 }
