@@ -21,7 +21,10 @@ import { EAuthProvider } from 'src/enums/EAuthProvider.enum';
 import { ERole } from 'src/enums/ERole.enum';
 import { UserUpdateRequestDto } from './dto/user-update-request.dto';
 import { UserResetPasswordDto } from './dto/user-reset-password.dto';
-
+type CountUserTestByAuthen = {
+  email: string; // raw query luôn trả về string
+  google: string;
+};
 @Injectable()
 export class UserService {
   constructor(
@@ -203,10 +206,7 @@ export class UserService {
       isActive: user.account?.isActive ?? false,
       fullName: user.fullName,
       avatar: user.avatar || null,
-      role: (user.role?.name as any) || null,
-      // --- SỬA 3: Format ngày tháng giống Java (Tùy chọn) ---
-      // Nếu Frontend tự format được ISO string thì giữ nguyên toISOString()
-      // Nếu muốn giống hệt Spring Boot:
+      role: user.role?.name || null,
       updatedAt: user.updatedAt ? this.formatDate(user.updatedAt) : '',
     };
   }
@@ -420,5 +420,70 @@ export class UserService {
     await this.accountRepository.update(user.account.id, {
       password: hashedPassword,
     });
+  }
+
+  async countAllUsers(): Promise<number> {
+    return this.accountRepository.count();
+  }
+
+  async countUsersByRole(role: ERole): Promise<number> {
+    return this.userRepository.count({
+      where: { role: { name: role } },
+    });
+  }
+
+  async countUsersByRoleBetweenDays(
+    role: ERole,
+    from: Date,
+    to: Date,
+  ): Promise<number> {
+    return this.userRepository
+      .createQueryBuilder('u')
+      .innerJoin('u.role', 'r')
+      .where('r.name = :role', { role })
+      .andWhere('u.createdAt >= :from', { from })
+      .andWhere('u.createdAt < :to', { to })
+      .getCount();
+  }
+
+  async countActiveUsersByRoleBetweenDays(
+    role: ERole,
+    from: Date,
+    to: Date,
+  ): Promise<number> {
+    return this.accountRepository
+      .createQueryBuilder('a')
+      .innerJoin('a.user', 'u')
+      .innerJoin('u.role', 'r')
+      .where('r.name = :role', { role })
+      .andWhere('a.updatedAt >= :from', { from })
+      .andWhere('a.updatedAt < :to', { to })
+      .getCount();
+  }
+
+  async countSourceInsight(
+    start: Date,
+    end: Date,
+    role: ERole,
+  ): Promise<{ email: number; google: number }> {
+    const result = await this.accountRepository
+      .createQueryBuilder('a')
+      .innerJoin('a.user', 'u')
+      .innerJoin('u.role', 'r')
+      .select([
+        'COALESCE(SUM(CASE WHEN a.authProvider = :local THEN 1 ELSE 0 END), 0) AS email',
+        'COALESCE(SUM(CASE WHEN a.authProvider = :google THEN 1 ELSE 0 END), 0) AS google',
+      ])
+      .where('r.name = :role', { role })
+      .andWhere('a.createdAt >= :start', { start })
+      .andWhere('a.createdAt < :end', { end })
+      .setParameter('local', EAuthProvider.LOCAL)
+      .setParameter('google', EAuthProvider.GOOGLE)
+      .getRawOne<CountUserTestByAuthen>();
+
+    return {
+      email: parseInt(result?.email || '0', 10),
+      google: parseInt(result?.google || '0', 10),
+    };
   }
 }

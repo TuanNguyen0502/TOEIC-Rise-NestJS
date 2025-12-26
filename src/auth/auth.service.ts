@@ -431,7 +431,10 @@ export class AuthService {
       const newTimes = times + 1;
 
       if (newTimes > MAX_VERIFY_OTP_TIMES) {
-        throw new AppException(ErrorCode.OTP_LIMIT_EXCEEDED, String(MAX_VERIFY_OTP_TIMES));
+        throw new AppException(
+          ErrorCode.OTP_LIMIT_EXCEEDED,
+          String(MAX_VERIFY_OTP_TIMES),
+        );
       }
 
       // Store updated count in cache (5 minutes TTL)
@@ -581,9 +584,8 @@ export class AuthService {
   async createRefreshTokenWithRefreshToken(
     refreshToken: string,
   ): Promise<string> {
-    const account = await this.userService.findAccountByRefreshToken(
-      refreshToken,
-    );
+    const account =
+      await this.userService.findAccountByRefreshToken(refreshToken);
     if (!account) {
       throw new AppException(ErrorCode.UNAUTHENTICATED);
     }
@@ -617,9 +619,8 @@ export class AuthService {
   }
 
   async refreshToken(refreshToken: string): Promise<RefreshTokenResponse> {
-    const account = await this.userService.findAccountByRefreshToken(
-      refreshToken,
-    );
+    const account =
+      await this.userService.findAccountByRefreshToken(refreshToken);
     if (!account) {
       throw new AppException(ErrorCode.UNAUTHENTICATED);
     }
@@ -653,6 +654,45 @@ export class AuthService {
 
   getRefreshTokenDurationMs(): number {
     return this.refreshTokenDurationMs;
+  }
+
+  async countAllUsersWithRole(role: ERole): Promise<number> {
+    return this.userService.countUsersByRole(role);
+  }
+
+  async countUsersBetweenDays(from: Date, to: Date): Promise<number> {
+    return this.userService.countUsersByRoleBetweenDays(
+      ERole.LEARNER,
+      from,
+      to,
+    );
+  }
+
+  async countActiveUser(from: Date, to: Date): Promise<number> {
+    return this.userService.countActiveUsersByRoleBetweenDays(
+      ERole.LEARNER,
+      from,
+      to,
+    );
+  }
+
+  async getRegSourceInsight(
+    from: Date,
+    to: Date,
+  ): Promise<{ email: number; google: number }> {
+    const result = await this.userService.countSourceInsight(
+      from,
+      to,
+      ERole.LEARNER,
+    );
+    const sum = result.google + result.email;
+    if (sum === 0) {
+      return result;
+    }
+    return {
+      email: Math.round((result.email / sum) * 100),
+      google: Math.round((result.google / sum) * 100),
+    };
   }
 
   async getCurrentUser(email: string): Promise<CurrentUserResponse> {

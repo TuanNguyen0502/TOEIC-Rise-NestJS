@@ -47,6 +47,23 @@ type LearnerTestHistoryRawRow = {
   timeSpent: number;
 };
 
+type CountUserTestByModeRaw = {
+  fullTest: string; // raw query luôn trả về string
+  pratice: string;
+};
+
+type CountUserTestByScoreRaw = {
+  brand0_200: string;
+  brand200_450: string;
+  brand450_750: string;
+  brand750_990: string;
+};
+
+type SubmissionByDateRaw = {
+  date: Date;
+  count: string; // raw SQL luôn trả string
+};
+
 @Injectable()
 export class UserTestService {
   constructor(
@@ -302,16 +319,6 @@ export class UserTestService {
     }
 
     const userAnswers = userTest.userAnswers ?? [];
-    // Fallback to relation-based group id in case questionGroupId column is null/not populated
-    const questionGroupIds = userAnswers.map(
-      (ua) => ua.questionGroupId ?? ua.question?.questionGroup?.id,
-    );
-    // Lọc bỏ null/undefined và tạo Set
-    const validQuestionGroupIds = new Set<number>(
-      questionGroupIds.filter(
-        (id): id is number => id !== null && id !== undefined,
-      ),
-    );
 
     // group answers by part name
     const answersByPart = new Map<string, any[]>();
@@ -586,5 +593,158 @@ export class UserTestService {
       (userTest.listeningScore ?? 0) + (userTest.readingScore ?? 0);
     userTest.totalListeningQuestions = listeningQuestion;
     userTest.totalReadingQuestions = readingQuestion;
+  }
+
+  async totalUserTest(): Promise<number> {
+    return this.userTestRepository.count();
+  }
+
+  async totalUserTestBetween(from: Date, to: Date): Promise<number> {
+    const testMode = await this.countUserTestByMode(from, to);
+    return testMode.fullTest + testMode.pratice;
+  }
+
+  async countUserTestByMode(
+    start: Date,
+    end: Date,
+  ): Promise<{ fullTest: number; pratice: number }> {
+    const result = await this.userTestRepository
+      .createQueryBuilder('ut')
+      .select([
+        'COALESCE(SUM(CASE WHEN ut.totalScore IS NOT NULL THEN 1 ELSE 0 END), 0) AS fullTest',
+        'COALESCE(SUM(CASE WHEN ut.totalScore IS NULL THEN 1 ELSE 0 END), 0) AS pratice',
+      ])
+      .where('ut.createdAt >= :start', { start })
+      .andWhere('ut.createdAt < :end', { end })
+      .getRawOne<CountUserTestByModeRaw>();
+
+    return {
+      fullTest: parseInt(result?.fullTest || '0', 10),
+      pratice: parseInt(result?.pratice || '0', 10),
+    };
+  }
+
+  async countUserTestByScore(
+    start: Date,
+    end: Date,
+  ): Promise<{
+    brand0_200: number;
+    brand200_450: number;
+    brand450_750: number;
+    brand750_990: number;
+  }> {
+    const result = await this.userTestRepository
+      .createQueryBuilder('ut')
+      .select([
+        'COALESCE(SUM(CASE WHEN ut.totalScore BETWEEN 0 AND 200 THEN 1 ELSE 0 END), 0) AS brand0_200',
+        'COALESCE(SUM(CASE WHEN ut.totalScore BETWEEN 201 AND 450 THEN 1 ELSE 0 END), 0) AS brand200_450',
+        'COALESCE(SUM(CASE WHEN ut.totalScore BETWEEN 451 AND 750 THEN 1 ELSE 0 END), 0) AS brand450_750',
+        'COALESCE(SUM(CASE WHEN ut.totalScore BETWEEN 751 AND 990 THEN 1 ELSE 0 END), 0) AS brand750_990',
+      ])
+      .where('ut.createdAt >= :start', { start })
+      .andWhere('ut.createdAt < :end', { end })
+      .getRawOne<CountUserTestByScoreRaw>();
+
+    return {
+      brand0_200: parseInt(result?.brand0_200 || '0', 10),
+      brand200_450: parseInt(result?.brand200_450 || '0', 10),
+      brand450_750: parseInt(result?.brand450_750 || '0', 10),
+      brand750_990: parseInt(result?.brand750_990 || '0', 10),
+    };
+  }
+
+  async getActivityTrend(
+    from: Date,
+    to: Date,
+  ): Promise<{
+    totalSubmissions: number;
+    points: Array<{ date: string; submissions: number }>;
+  }> {
+    const rawResults = await this.userTestRepository
+      .createQueryBuilder('ut')
+      .select('DATE(ut.createdAt)', 'date')
+      .addSelect('COUNT(ut.id)', 'count')
+      .where('ut.createdAt >= :start', { start: from })
+      .andWhere('ut.createdAt < :end', { end: to })
+      .groupBy('DATE(ut.createdAt)')
+      .orderBy('DATE(ut.createdAt)', 'ASC')
+      .getRawMany<SubmissionByDateRaw>();
+
+    // Map raw results to ActivityPointResponse
+    const submissionsByDate = new Map<string, number>();
+    rawResults.forEach((row) => {
+      const dateStr = row.date.toISOString().split('T')[0]; // Convert to YYYY-MM-DD
+      submissionsByDate.set(dateStr, parseInt(row.count || '0', 10));
+    });
+
+    // Fill in all dates in range
+    const points: Array<{ date: string; submissions: number }> = [];
+    const current = new Date(from);
+    current.setHours(0, 0, 0, 0);
+    const end = new Date(to);
+    end.setDate(end.getDate() - 1);
+    end.setHours(0, 0, 0, 0);
+
+    let totalSubmissions = 0;
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      const count = submissionsByDate.get(dateStr) || 0;
+      totalSubmissions += count;
+      points.push({
+        date: dateStr,
+        submissions: count,
+      });
+      current.setDate(current.getDate() + 1);
+    }
+
+    return {
+      totalSubmissions,
+      points,
+    };
+  }
+
+  async getScoreInsight(
+    start: Date,
+    end: Date,
+  ): Promise<{
+    brand0_200: number;
+    brand200_450: number;
+    brand450_750: number;
+    brand750_990: number;
+  }> {
+    const distInsight = await this.countUserTestByScore(start, end);
+    const total =
+      distInsight.brand0_200 +
+      distInsight.brand200_450 +
+      distInsight.brand450_750 +
+      distInsight.brand750_990;
+
+    if (total === 0) {
+      return distInsight;
+    }
+
+    return {
+      brand0_200: Math.round((distInsight.brand0_200 / total) * 100),
+      brand200_450: Math.round((distInsight.brand200_450 / total) * 100),
+      brand450_750: Math.round((distInsight.brand450_750 / total) * 100),
+      brand750_990: Math.round((distInsight.brand750_990 / total) * 100),
+    };
+  }
+
+  async getTestModeInsight(
+    start: Date,
+    end: Date,
+  ): Promise<{ fullTest: number; pratice: number }> {
+    const testMode = await this.countUserTestByMode(start, end);
+    const sum = testMode.fullTest + testMode.pratice;
+
+    if (sum === 0) {
+      return testMode;
+    }
+
+    return {
+      fullTest: Math.round((testMode.fullTest / sum) * 100),
+      pratice: Math.round((testMode.pratice / sum) * 100),
+    };
   }
 }

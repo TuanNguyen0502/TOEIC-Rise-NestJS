@@ -28,14 +28,15 @@ import { GetTestSetDetailQueryDto } from 'src/test-set/dto/get-test-set-detail-q
 
 type ExcelCell = string | number | null;
 type ExcelRow = ExcelCell[];
-interface LearnerTestRawRow {
+
+type LearnerTestDetailRaw = {
   testId: number;
   testName: string;
   numberOfLearnedTests: number;
   partId: number;
   partName: string;
   tagNames: string | null;
-}
+};
 
 @Injectable()
 export class TestService {
@@ -51,7 +52,6 @@ export class TestService {
     private readonly testExcelMapper: TestExcelMapper,
   ) {}
 
-
   async searchTestsByName(dto: PageRequestDto) {
     const { page, size, name, sort } = dto;
 
@@ -62,13 +62,12 @@ export class TestService {
       },
     };
 
-
     if (sort) {
       const testSetIds = sort
         .split(',')
         .map((id) => parseInt(id.trim(), 10))
         .filter((id) => !isNaN(id));
-      
+
       if (testSetIds.length > 0) {
         whereOptions.testSet = {
           status: ETestSetStatus.IN_USE,
@@ -109,32 +108,32 @@ export class TestService {
     };
   }
 
-
   async getLearnerTestDetailById(
     id: number,
   ): Promise<LearnerTestDetailResponse> {
     // Use native query to match Java implementation exactly
-    const testWithDetails = await this.testRepository.query(
-      `
-      SELECT 
-        t.id AS testId, 
-        t.name AS testName, 
-        t.number_of_learner_tests AS numberOfLearnedTests, 
-        p.name AS partName, 
-        p.id AS partId,
-        GROUP_CONCAT(DISTINCT tg.name ORDER BY tg.name SEPARATOR '; ') AS tagNames 
-      FROM tests t 
-      INNER JOIN question_groups qg ON qg.test_id = t.id 
-      INNER JOIN questions q ON q.question_group_id = qg.id 
-      INNER JOIN parts p ON qg.part_id = p.id 
-      LEFT JOIN questions_tags qtg ON qtg.question_id = q.id 
-      LEFT JOIN tags tg ON qtg.tag_id = tg.id 
-      WHERE t.id = ? AND t.status = 'APPROVED'
-      GROUP BY t.id, t.name, t.number_of_learner_tests, p.name, p.id 
-      ORDER BY p.id
-    `,
-      [id],
-    );
+    const testWithDetails: LearnerTestDetailRaw[] =
+      await this.testRepository.query(
+        `
+        SELECT 
+          t.id AS testId, 
+          t.name AS testName, 
+          t.number_of_learner_tests AS numberOfLearnedTests, 
+          p.name AS partName, 
+          p.id AS partId,
+          GROUP_CONCAT(DISTINCT tg.name ORDER BY tg.name SEPARATOR '; ') AS tagNames 
+        FROM tests t 
+        INNER JOIN question_groups qg ON qg.test_id = t.id 
+        INNER JOIN questions q ON q.question_group_id = qg.id 
+        INNER JOIN parts p ON qg.part_id = p.id 
+        LEFT JOIN questions_tags qtg ON qtg.question_id = q.id 
+        LEFT JOIN tags tg ON qtg.tag_id = tg.id 
+        WHERE t.id = ? AND t.status = 'APPROVED'
+        GROUP BY t.id, t.name, t.number_of_learner_tests, p.name, p.id 
+        ORDER BY p.id
+        `,
+        [id],
+      );
 
     if (!testWithDetails || testWithDetails.length === 0) {
       throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
@@ -156,15 +155,6 @@ export class TestService {
     return response;
   }
 
-  /**
-   * Corresponds to: testService.getAllTests(...)
-   *
-   * This implements the admin logic from TestServiceImpl.java:
-   * - Filters by name (if provided)
-   * - Filters by status (if provided)
-   * - If status is NOT provided, it filters out DELETED.
-   * - Paginates and sorts
-   */
   async getAllTests(dto: GetTestsAdminDto) {
     const { page, size, sortBy, direction, name, status } = dto;
 
@@ -208,11 +198,6 @@ export class TestService {
     };
   }
 
-  /**
-   * Corresponds to: testService.getTestDetailById(id)
-   * * This replicates the logic from TestServiceImpl.java but optimizes
-   * the data fetching to avoid N+1 queries.
-   */
   async getAdminTestDetailById(id: number) {
     const test = await this.testRepository.findOne({
       where: { id },
@@ -222,13 +207,9 @@ export class TestService {
       throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Test');
     }
 
-    // Fetch question groups.
-    // IMPORTANT: Ensure 'getQuestionGroupAsc' in QuestionGroupService loads relations:
-    // ['part', 'questions', 'questions.tags']
     const questionGroups =
       await this.questionGroupService.getQuestionGroupAsc(id);
 
-    // Manually group by Part ID (using primitive ID is safer than Object reference in JS Map)
     const groupsMap = new Map<
       number,
       { part: Part; groups: QuestionGroup[] }
@@ -390,10 +371,6 @@ export class TestService {
 
     for (const question of sortedQuestions) {
       const groupNumber = extractGroupNumber(question.questionGroupId ?? null);
-      // if (groupNumber == null) {
-      //   if (question.numberOfQuestions == null)
-      //     throw new AppException(ErrorCode.VALIDATION_ERROR);
-      // }
       const groupKey = groupNumber ?? -question.numberOfQuestions!;
       if (!groupedQuestions.has(groupKey)) {
         groupedQuestions.set(groupKey, []);
@@ -581,5 +558,9 @@ export class TestService {
       createdAt: updatedTest.createdAt,
       updatedAt: updatedTest.updatedAt,
     };
+  }
+
+  async totalTest(): Promise<number> {
+    return this.testRepository.count();
   }
 }

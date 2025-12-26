@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, In } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { QuestionReport } from 'src/entities/question-report.entity';
 import { User } from 'src/entities/user.entity';
 import { GetQuestionReportsQueryDto } from './dto/get-question-reports-query.dto';
@@ -291,5 +291,9 @@ export class QuestionReportService {
         );
       }
     }
+  }
+
+  async totalReports(): Promise<number> {
+    return this.questionReportRepo.count();
   }
 }

@@ -163,4 +163,8 @@ export class TestSetService {
 
     return TestSetMapper.toTestSetResponse(oldTestSet);
   }
+
+  async totalTestSets(): Promise<number> {
+    return this.testSetRepository.count();
+  }
 }

@@ -22,6 +22,8 @@ import { PartModule } from './part/part.module';
 import { TagModule } from './tag/tag.module';
 import { QuestionReportModule } from './question-report/question-report.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
+import { StatisticModule } from './statistic/statistic.module';
+import { FlashcardModule } from './flashcard/flashcard.module';
 
 @Module({
   imports: [
@@ -90,6 +92,8 @@ import { ChatbotModule } from './chatbot/chatbot.module';
     TagModule,
     QuestionReportModule,
     ChatbotModule,
+    StatisticModule,
+    FlashcardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
