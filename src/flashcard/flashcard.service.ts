@@ -2,18 +2,22 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Flashcard } from 'src/entities/flashcard.entity';
+import { FlashcardItem } from 'src/entities/flashcard-item.entity';
 import { User } from 'src/entities/user.entity';
 import { FlashcardFavourite } from 'src/entities/flashcard-favourite.entity';
 import { EAccessType } from 'src/enums/EAccessType.enum';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
 import { FlashcardMapper } from './mapper/flashcard.mapper';
+import { FlashcardCreateRequest } from './dto/flashcard-create-request.dto';
 
 @Injectable()
 export class FlashcardService {
   constructor(
     @InjectRepository(Flashcard)
     private readonly flashcardRepository: Repository<Flashcard>,
+    @InjectRepository(FlashcardItem)
+    private readonly flashcardItemRepository: Repository<FlashcardItem>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(FlashcardFavourite)
@@ -23,6 +27,50 @@ export class FlashcardService {
 
   async totalFlashcards(): Promise<number> {
     return this.flashcardRepository.count();
+  }
+
+  async createFlashcard(
+    email: string,
+    flashcardCreateRequest: FlashcardCreateRequest,
+  ): Promise<void> {
+    // Get user by email
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!user) {
+      throw new AppException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    // Create flashcard entity
+    const flashcard = this.flashcardRepository.create({
+      user,
+      name: flashcardCreateRequest.name,
+      description: flashcardCreateRequest.description,
+      accessType: flashcardCreateRequest.accessType,
+      favouriteCount: 0,
+    });
+
+    // Save flashcard first to get the ID
+    const savedFlashcard = await this.flashcardRepository.save(flashcard);
+
+    // Create and save flashcard items if provided
+    if (
+      flashcardCreateRequest.items &&
+      flashcardCreateRequest.items.length > 0
+    ) {
+      const flashcardItems = flashcardCreateRequest.items.map((itemRequest) =>
+        this.flashcardItemRepository.create({
+          flashcard: savedFlashcard,
+          vocabulary: itemRequest.vocabulary,
+          definition: itemRequest.definition,
+          audioUrl: itemRequest.audioUrl,
+          pronunciation: itemRequest.pronunciation,
+        }),
+      );
+
+      await this.flashcardItemRepository.save(flashcardItems);
+    }
   }
 
   async getAllPublicFlashcards(

@@ -5,6 +5,7 @@ import {
   UseGuards,
   Post,
   Delete,
+  Body,
   Param,
   ParseIntPipe,
   HttpCode,
@@ -14,6 +15,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FlashcardService } from './flashcard.service';
 import { GetCurrentUserEmail } from 'src/common/utils/decorators/get-current-user.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { FlashcardCreateRequest } from './dto/flashcard-create-request.dto';
 
 @ApiTags('learner/flashcards')
 @ApiBearerAuth('JWT')
@@ -21,6 +23,16 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 export class FlashcardController {
   constructor(private readonly flashcardService: FlashcardService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  async createFlashcard(
+    @Body() flashcardCreateRequest: FlashcardCreateRequest,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    await this.flashcardService.createFlashcard(email, flashcardCreateRequest);
+    return { message: 'Flashcard created successfully' };
+  }
 
   @Get('public')
   async getPublicFlashcards(
