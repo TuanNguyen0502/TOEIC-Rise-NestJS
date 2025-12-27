@@ -4,6 +4,7 @@ import {
   Query,
   UseGuards,
   Post,
+  Delete,
   Param,
   ParseIntPipe,
   HttpCode,
@@ -86,5 +87,15 @@ export class FlashcardController {
   ) {
     await this.flashcardService.addFavourite(email, flashcardId);
     return { message: 'Added to favourites' };
+  }
+
+  @Delete('favourite/:flashcardId')
+  @HttpCode(HttpStatus.OK)
+  async deleteFlashcardFromFavourite(
+    @Param('flashcardId', ParseIntPipe) flashcardId: number,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    await this.flashcardService.deleteFavourite(email, flashcardId);
+    return { message: 'Removed from favourites' };
   }
 }

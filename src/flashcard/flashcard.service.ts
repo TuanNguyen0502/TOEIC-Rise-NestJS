@@ -262,4 +262,33 @@ export class FlashcardService {
     });
     await this.flashcardFavouriteRepository.save(favourite);
   }
+
+  async deleteFavourite(email: string, flashcardId: number): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!user) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'User');
+    }
+
+    const favourite = await this.flashcardFavouriteRepository.findOne({
+      where: {
+        user: { id: user.id },
+        flashcard: { id: flashcardId },
+      },
+      relations: ['flashcard'],
+    });
+    if (!favourite) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Favourite flashcard');
+    }
+
+    // Decrement favourite count
+    const flashcard = favourite.flashcard;
+    flashcard.favouriteCount = Math.max(0, flashcard.favouriteCount - 1);
+    await this.flashcardRepository.save(flashcard);
+
+    // Delete the favourite record
+    await this.flashcardFavouriteRepository.delete(favourite.id);
+  }
 }
