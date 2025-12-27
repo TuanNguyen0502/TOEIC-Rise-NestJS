@@ -4,6 +4,7 @@ import {
   Query,
   UseGuards,
   Post,
+  Put,
   Delete,
   Body,
   Param,
@@ -16,6 +17,7 @@ import { FlashcardService } from './flashcard.service';
 import { GetCurrentUserEmail } from 'src/common/utils/decorators/get-current-user.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { FlashcardCreateRequest } from './dto/flashcard-create-request.dto';
+import { FlashcardUpdateRequest } from './dto/flashcard-update-request.dto';
 
 @ApiTags('learner/flashcards')
 @ApiBearerAuth('JWT')
@@ -127,5 +129,19 @@ export class FlashcardController {
   ) {
     await this.flashcardService.deleteFlashcard(email, flashcardId);
     return { message: 'Flashcard deleted' };
+  }
+
+  @Put(':flashcardId')
+  @HttpCode(HttpStatus.OK)
+  async updateFlashcard(
+    @Param('flashcardId', ParseIntPipe) flashcardId: number,
+    @Body() flashcardUpdateRequest: FlashcardUpdateRequest,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    return this.flashcardService.updateFlashcard(
+      email,
+      flashcardId,
+      flashcardUpdateRequest,
+    );
   }
 }

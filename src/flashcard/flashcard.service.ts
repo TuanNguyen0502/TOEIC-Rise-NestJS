@@ -10,6 +10,7 @@ import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
 import { FlashcardMapper } from './mapper/flashcard.mapper';
 import { FlashcardCreateRequest } from './dto/flashcard-create-request.dto';
+import { FlashcardUpdateRequest } from './dto/flashcard-update-request.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -236,7 +237,10 @@ export class FlashcardService {
       )
       .leftJoinAndSelect('f.user', 'user')
       .leftJoinAndSelect('f.items', 'items')
-      .addSelect('true', 'isFavourite');
+      .addSelect('true', 'isFavourite')
+      .where('f.access_type = :accessType', {
+        accessType: EAccessType.PUBLIC,
+      });
 
     if (name) {
       query.andWhere('LOWER(f.name) LIKE LOWER(:name)', {
@@ -417,5 +421,56 @@ export class FlashcardService {
 
     // Delete flashcard
     await this.flashcardRepository.delete(flashcardId);
+  }
+
+  async updateFlashcard(
+    email: string,
+    flashcardId: number,
+    flashcardUpdateRequest: FlashcardUpdateRequest,
+  ) {
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!user) {
+      throw new AppException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    const flashcard = await this.flashcardRepository.findOne({
+      where: { id: flashcardId },
+      relations: ['user', 'items'],
+    });
+    if (!flashcard) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    // Check ownership
+    if (flashcard.user.id !== user.id) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    // Update flashcard details
+    this.flashcardMapper.updateFlashcard(flashcardUpdateRequest, flashcard);
+    await this.flashcardRepository.save(flashcard);
+
+    // Delete all old items
+    await this.flashcardItemRepository.delete({ flashcard: { id: flashcardId } });
+
+    // Create all new items from request
+    if (
+      flashcardUpdateRequest.items &&
+      flashcardUpdateRequest.items.length > 0
+    ) {
+      const newItems = flashcardUpdateRequest.items.map((itemRequest) =>
+        this.flashcardItemRepository.create({
+          flashcard,
+          vocabulary: itemRequest.vocabulary,
+          definition: itemRequest.definition,
+          audioUrl: itemRequest.audioUrl,
+          pronunciation: itemRequest.pronunciation,
+        }),
+      );
+      await this.flashcardItemRepository.save(newItems);
+    }
   }
 }
