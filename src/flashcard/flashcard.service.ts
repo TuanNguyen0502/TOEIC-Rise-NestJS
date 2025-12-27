@@ -291,4 +291,54 @@ export class FlashcardService {
     // Delete the favourite record
     await this.flashcardFavouriteRepository.delete(favourite.id);
   }
+
+  async getFlashcardDetailById(email: string, flashcardId: number) {
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!user) {
+      throw new AppException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    const flashcard = await this.flashcardRepository.findOne({
+      where: { id: flashcardId },
+      relations: ['user', 'items'],
+    });
+    if (!flashcard) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    // Check access for PRIVATE flashcards
+    if (
+      flashcard.accessType === EAccessType.PRIVATE &&
+      flashcard.user.id !== user.id
+    ) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    // Check if owner
+    const isOwner = flashcard.user.id === user.id;
+
+    // Check if favourite
+    const favourite = await this.flashcardFavouriteRepository.findOne({
+      where: {
+        user: { id: user.id },
+        flashcard: { id: flashcardId },
+      },
+    });
+    const isFavourite = favourite != null;
+
+    // Map items
+    const items = flashcard.items.map((item) =>
+      this.flashcardMapper.toFlashcardItemDetailResponse(item),
+    );
+
+    return this.flashcardMapper.toFlashcardDetailResponse(
+      flashcard,
+      isOwner,
+      isFavourite,
+      items,
+    );
+  }
 }

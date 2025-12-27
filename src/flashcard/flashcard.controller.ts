@@ -98,4 +98,12 @@ export class FlashcardController {
     await this.flashcardService.deleteFavourite(email, flashcardId);
     return { message: 'Removed from favourites' };
   }
+
+  @Get(':flashcardId')
+  async getFlashcardDetail(
+    @Param('flashcardId', ParseIntPipe) flashcardId: number,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    return this.flashcardService.getFlashcardDetailById(email, flashcardId);
+  }
 }
