@@ -106,4 +106,14 @@ export class FlashcardController {
   ) {
     return this.flashcardService.getFlashcardDetailById(email, flashcardId);
   }
+
+  @Delete(':flashcardId')
+  @HttpCode(HttpStatus.OK)
+  async deleteFlashcard(
+    @Param('flashcardId', ParseIntPipe) flashcardId: number,
+    @GetCurrentUserEmail() email: string,
+  ) {
+    await this.flashcardService.deleteFlashcard(email, flashcardId);
+    return { message: 'Flashcard deleted' };
+  }
 }

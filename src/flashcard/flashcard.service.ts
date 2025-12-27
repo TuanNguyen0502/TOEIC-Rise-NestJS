@@ -341,4 +341,33 @@ export class FlashcardService {
       items,
     );
   }
+
+  async deleteFlashcard(email: string, flashcardId: number): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!user) {
+      throw new AppException(ErrorCode.UNAUTHENTICATED);
+    }
+
+    const flashcard = await this.flashcardRepository.findOne({
+      where: { id: flashcardId },
+      relations: ['user'],
+    });
+    if (!flashcard) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    // Check ownership
+    if (flashcard.user.id !== user.id) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Flashcard');
+    }
+
+    // Delete associated favourites
+    await this.flashcardFavouriteRepository.delete({ flashcard: { id: flashcardId } });
+
+    // Delete flashcard
+    await this.flashcardRepository.delete(flashcardId);
+  }
 }
