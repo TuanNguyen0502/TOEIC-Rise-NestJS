@@ -16,7 +16,7 @@ export class StringListTransformer implements ValueTransformer {
   /**
    * Used to marshal data when writing to the database.
    */
-  to(value: string[] | null): string | null {
+  to(value: (string | null)[] | null): string | null {
     if (!value) {
       return '[]';
     }
@@ -30,23 +30,29 @@ export class StringListTransformer implements ValueTransformer {
   /**
    * Used to unmarshal data when reading from the database.
    */
-  from(value: string | null): string[] {
+  from(value: string | null): (string | null)[] {
     if (value == null) {
       return [];
     }
+
+    const normalizeArray = (arr: unknown[]): (string | null)[] =>
+      arr.map((v) => (v === null || v === undefined ? null : (v as string)));
+
     if (Array.isArray(value)) {
-      return value.map((v) => String(v));
+      return normalizeArray(value as unknown[]);
     }
+
     if (typeof value === 'string') {
       try {
         const parsed: unknown = JSON.parse(value);
         if (Array.isArray(parsed)) {
-          return parsed.map((v) => String(v));
+          return normalizeArray(parsed);
         }
       } catch {
         return [];
       }
     }
+
     return [];
   }
 }

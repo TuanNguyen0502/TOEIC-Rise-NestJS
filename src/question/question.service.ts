@@ -235,4 +235,30 @@ export class QuestionService {
       await this.testRepository.save(test);
     }
   }
+
+    async getAllQuestionsByPartAndTags(
+      tagIds: Set<number>,
+      partId: number,
+    ): Promise<Question[]> {
+      return await this.questionRepository
+        .createQueryBuilder('q')
+        .leftJoinAndSelect('q.questionGroup', 'qg')
+        .leftJoinAndSelect('qg.part', 'p')
+        .leftJoinAndSelect('qg.test', 't')
+        .leftJoinAndSelect('q.tags', 'tags')
+        .where('p.id = :partId', { partId })
+        .andWhere((qb) => {
+          const subQuery = qb
+            .subQuery()
+            .select('1')
+            .from(Tag, 'tg')
+            .innerJoin('tg.questions', 'tgq')
+            .where('tgq.id = q.id')
+            .andWhere('tg.id IN (:...tagIds)', { tagIds: [...tagIds] })
+            .getQuery();
+          return `EXISTS (${subQuery})`;
+        })
+        .andWhere('t.status = :status', { status: ETestStatus.APPROVED })
+        .getMany();
+    }
 }
