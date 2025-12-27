@@ -2,16 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { Tag } from '../entities/tag.entity';
+import { Part } from '../entities/part.entity';
 import { AppException } from 'src/exceptions/app.exception';
 import { ErrorCode } from 'src/enums/ErrorCode.enum';
 import { PageResponse } from 'src/test-set/dto/page-response.dto';
 import { TagResponseDto } from './dto/tag-response.dto';
+import { TagByPartResponse } from './dto/tag-by-part-response.dto';
 
 @Injectable()
 export class TagService {
   constructor(
     @InjectRepository(Tag)
     private readonly tagRepository: Repository<Tag>,
+    @InjectRepository(Part)
+    private readonly partRepository: Repository<Part>,
   ) {}
 
   /**
@@ -161,5 +165,38 @@ export class TagService {
       },
       result: tagResponses,
     };
+  }
+
+  /**
+   * Get tags by part ID
+   * Corresponds to Spring: tagService.getTagsByPartId(partId)
+   */
+  async getTagsByPartId(partId: number): Promise<TagByPartResponse[]> {
+    // Check if part exists
+    const partExists = await this.partRepository.existsBy({ id: partId });
+    if (!partExists) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Part');
+    }
+
+    // Query tags by part ID
+    // SELECT DISTINCT t FROM Part p
+    // JOIN p.questionGroups qg
+    // JOIN qg.questions q
+    // JOIN q.tags t
+    // WHERE p.id = :partId
+    const tags = await this.tagRepository
+      .createQueryBuilder('t')
+      .innerJoin('t.questions', 'q')
+      .innerJoin('q.questionGroup', 'qg')
+      .innerJoin('qg.part', 'p')
+      .where('p.id = :partId', { partId })
+      .distinct(true)
+      .getMany();
+
+    // Map to TagByPartResponse
+    return tags.map((tag) => ({
+      tagId: tag.id,
+      tagName: tag.name,
+    }));
   }
 }
