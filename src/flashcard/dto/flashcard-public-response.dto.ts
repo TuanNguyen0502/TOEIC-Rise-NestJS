@@ -7,5 +7,5 @@ export class FlashcardPublicResponse {
   accessType: EAccessType;
   itemCount: number;
   favouriteCount: number;
-  isFavourite: boolean;
+  favourite: boolean;
 }

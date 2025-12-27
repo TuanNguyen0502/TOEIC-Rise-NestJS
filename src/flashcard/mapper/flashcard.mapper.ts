@@ -11,7 +11,7 @@ export class FlashcardMapper {
       accessType: flashcard.accessType,
       itemCount: flashcard.items?.length || 0,
       favouriteCount: flashcard.favouriteCount,
-      isFavourite,
+      favourite: isFavourite,
     };
   }
 }

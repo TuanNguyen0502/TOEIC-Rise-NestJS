@@ -33,7 +33,7 @@ export class FlashcardService {
     sortBy: string,
     direction: string,
   ) {
-    // Get user from email
+
     const user = await this.userRepository.findOne({
       where: { account: { email } },
       relations: ['account'],
@@ -43,9 +43,6 @@ export class FlashcardService {
       throw new AppException(ErrorCode.UNAUTHENTICATED);
     }
 
-    console.log('Current user ID:', user.id);
-
-    // Step 1: Query flashcards normally
     const query = this.flashcardRepository
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.user', 'user')
@@ -65,10 +62,8 @@ export class FlashcardService {
 
     const [results, total] = await query.getManyAndCount();
 
-    // Step 2: Get flashcard IDs from results
     const flashcardIds = results.map((f) => f.id);
 
-    // Step 3: Query user's favourites for these flashcards
     const userFavourites = await this.flashcardFavouriteRepository.find({
       where: {
         user: { id: user.id },
@@ -77,20 +72,13 @@ export class FlashcardService {
       relations: ['flashcard'],
     });
 
-    console.log('User favourites found:', userFavourites.length);
-    console.log('Favourite flashcard IDs:', userFavourites.map(f => f.flashcard.id));
-
-    // Step 4: Create set of favourite IDs for O(1) lookup
     const favouriteIds = new Set(userFavourites.map((f) => f.flashcard.id));
 
-    console.log('Favourite IDs set:', Array.from(favouriteIds));
-
-    // Step 5: Map results with isFavourite flag
     const flashcards = results.map((flashcard) => {
-      const isFavourite = favouriteIds.has(flashcard.id);
+      const favourite = favouriteIds.has(flashcard.id);
       return this.flashcardMapper.toFlashcardPublicResponse(
         flashcard,
-        isFavourite,
+        favourite,
       );
     });
 
@@ -123,7 +111,6 @@ export class FlashcardService {
       throw new AppException(ErrorCode.UNAUTHENTICATED);
     }
 
-    // Step 1: Query user's flashcards normally
     const query = this.flashcardRepository
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.user', 'user')
@@ -143,10 +130,8 @@ export class FlashcardService {
 
     const [results, total] = await query.getManyAndCount();
 
-    // Step 2: Get flashcard IDs from results
     const flashcardIds = results.map((f) => f.id);
 
-    // Step 3: Query user's favourites for these flashcards
     const userFavourites = await this.flashcardFavouriteRepository.find({
       where: {
         user: { id: user.id },
@@ -158,10 +143,10 @@ export class FlashcardService {
     const favouriteIds = new Set(userFavourites.map((f) => f.flashcard.id));
 
     const flashcards = results.map((flashcard) => {
-      const isFavourite = favouriteIds.has(flashcard.id);
+      const favourite = favouriteIds.has(flashcard.id);
       return this.flashcardMapper.toFlashcardPublicResponse(
         flashcard,
-        isFavourite,
+        favourite,
       );
     });
 

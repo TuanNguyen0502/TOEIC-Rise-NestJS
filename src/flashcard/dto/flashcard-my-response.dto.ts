@@ -13,7 +13,7 @@ export class FlashcardMyResponse {
 
   favouriteCount: number;
 
-  isFavourite: boolean;
+  favourite: boolean;
 
   createdAt: Date;
 
