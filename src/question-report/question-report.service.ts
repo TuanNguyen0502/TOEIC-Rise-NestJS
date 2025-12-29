@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets } from 'typeorm';
 import { QuestionReport } from 'src/entities/question-report.entity';
 import { User } from 'src/entities/user.entity';
+import { Question } from 'src/entities/question.entity';
 import { GetQuestionReportsQueryDto } from './dto/get-question-reports-query.dto';
 import { QuestionReportResponseDto } from './dto/question-report-response.dto';
 import { PageResponse } from './dto/page-response.dto';
@@ -22,9 +23,41 @@ export class QuestionReportService {
     private readonly questionReportRepo: Repository<QuestionReport>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Question)
+    private readonly questionRepo: Repository<Question>,
     private readonly questionService: QuestionService,
     private readonly questionGroupService: QuestionGroupService,
   ) {}
+
+  async createReport(
+    email: string,
+    dto: { questionId: number; reasons: any[]; description?: string },
+  ): Promise<void> {
+    const reporter = await this.userRepo.findOne({
+      where: { account: { email } },
+      relations: ['account'],
+    });
+    if (!reporter) {
+      throw new AppException(ErrorCode.UNAUTHORIZED);
+    }
+
+    const question = await this.questionRepo.findOne({
+      where: { id: dto.questionId },
+    });
+    if (!question) {
+      throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+    }
+
+    const report = this.questionReportRepo.create({
+      question,
+      reporter,
+      reasons: dto.reasons as any,
+      description: dto.description,
+      status: EQuestionReportStatus.PENDING,
+    });
+
+    await this.questionReportRepo.save(report);
+  }
 
   async getAllReports(
     query: GetQuestionReportsQueryDto,
