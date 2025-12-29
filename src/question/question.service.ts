@@ -261,4 +261,30 @@ export class QuestionService {
         .andWhere('t.status = :status', { status: ETestStatus.APPROVED })
         .getMany();
     }
-}
+  async getQuestionsWithGroupsByIds(questionIds: number[]): Promise<Question[]> {
+    if (questionIds.length === 0) {
+      return [];
+    }
+
+    return await this.questionRepository.find({
+      where: { id: In(questionIds) },
+      relations: ['questionGroup', 'tags'],
+    });
+  }
+
+  /**
+   * Validate that all question IDs exist in the provided questions list
+   * Throws AppException if any question ID is missing
+   */
+  async validateQuestion(
+    questionIds: number[],
+    questions: Question[],
+  ): Promise<void> {
+    const foundIds = new Set(questions.map((q) => q.id));
+
+    for (const id of questionIds) {
+      if (!foundIds.has(id)) {
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+      }
+    }
+  }}

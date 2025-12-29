@@ -401,4 +401,110 @@ export class QuestionGroupService {
   private isCloudinaryUrl(url: string): boolean {
     return url.includes('cloudinary.com');
   }
+
+  async getMiniTestOverallResponse(
+    request: any,
+  ): Promise<any> {
+    const questionIds: number[] = request.questionGroups
+      .flatMap((group: any) => group.userAnswerRequests)
+      .map((userAnswer: any) => userAnswer.questionId)
+      .filter((id: any) => id != null);
+
+    const questions = await this.questionService.getQuestionsWithGroupsByIds(
+      Array.from(new Set(questionIds)),
+    );
+
+    await this.questionService.validateQuestion(questionIds, questions);
+
+    const questionMap = new Map(questions.map((q) => [q.id, q]));
+
+    return this.calculatorAnswerMiniTest(request, questionMap, questions);
+  }
+
+  private calculatorAnswerMiniTest(
+    miniTestRequest: any,
+    questionMap: Map<number, any>,
+    questions: any[],
+  ): any {
+    let correctAnswers = 0;
+    const miniTestAnswerQuestionResponses = new Map<any, any[]>();
+    let groupPosition = 1;
+    let globalQuestionPosition = 1;
+
+    for (const questionGroupRequest of miniTestRequest.questionGroups) {
+      if (questionGroupRequest.questionGroupId == null) {
+        throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question group');
+      }
+
+      for (const userAnswerRequest of questionGroupRequest.userAnswerRequests) {
+        if (userAnswerRequest.questionId == null) {
+          throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+        }
+
+        const question = questionMap.get(userAnswerRequest.questionId);
+        if (!question) {
+          throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, 'Question');
+        }
+
+        if (
+          question.questionGroup.id !==
+          questionGroupRequest.questionGroupId
+        ) {
+          throw new AppException(ErrorCode.VALIDATION_ERROR);
+        }
+
+        const isCorrect =
+          userAnswerRequest.answer != null &&
+          question.correctOption != null &&
+          question.correctOption === userAnswerRequest.answer;
+
+        if (isCorrect) correctAnswers++;
+
+        const miniTestAnswerQuestionResponse = {
+          id: question.id,
+          position: question.position,
+          index: globalQuestionPosition++,
+          content: question.content,
+          options: question.options,
+          correctOption: question.correctOption,
+          userAnswer: userAnswerRequest.answer,
+          isCorrect,
+        };
+
+        if (!miniTestAnswerQuestionResponses.has(question.questionGroup)) {
+          miniTestAnswerQuestionResponses.set(question.questionGroup, []);
+        }
+        const questions = miniTestAnswerQuestionResponses.get(
+          question.questionGroup,
+        );
+        if (questions) {
+          questions.push(miniTestAnswerQuestionResponse);
+        }
+      }
+    }
+
+    const groupResponses: any[] = [];
+    let groupIndex = 1;
+    for (const [
+      questionGroup,
+      questionResponses,
+    ] of miniTestAnswerQuestionResponses.entries()) {
+      const miniTestQuestionGroupResponse = {
+        id: questionGroup.id,
+        index: groupIndex++,
+        position: questionGroup.position,
+        audioUrl: questionGroup.audioUrl,
+        imageUrl: questionGroup.imageUrl,
+        passage: questionGroup.passage,
+        questions: questionResponses,
+      };
+      groupResponses.push(miniTestQuestionGroupResponse);
+    }
+
+    return {
+      correctAnswers,
+      totalQuestions: questions.length,
+      questionGroups: groupResponses,
+    };
+  }
 }

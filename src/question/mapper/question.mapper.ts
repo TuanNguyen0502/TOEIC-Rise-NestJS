@@ -60,4 +60,23 @@ export class QuestionMapper {
       tags: question.tags ? question.tags.map((tag) => tag.name) : [],
     };
   }
+
+  /**
+   * Maps Question entity to MiniTestAnswerQuestionResponse
+   * Used in mini-test submission to show answer details
+   */
+  toMiniTestAnswerQuestionResponse(question: Question): any {
+    const normalizedOptions =
+      !question.options || question.options.length === 0
+        ? [null, null, null, null]
+        : question.options.map((o) => (o === 'null' || o === '' ? null : o));
+
+    return {
+      id: question.id,
+      position: question.position,
+      content: question.content || '',
+      options: normalizedOptions,
+      correctOption: question.correctOption || '',
+    };
+  }
 }

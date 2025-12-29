@@ -1,8 +1,11 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, UseGuards } from '@nestjs/common';
 import { TagService } from '../tag/tag.service';
 import { MiniTestService } from './mini-test.service';
+import { QuestionGroupService } from '../question-group/question-group.service';
 import { TagByPartResponse } from '../tag/dto/tag-by-part-response.dto';
 import { MiniTestResponse } from './dto/mini-test-response.dto';
+import { MiniTestRequest } from './dto/mini-test-request.dto';
+import { MiniTestOverallResponse } from './dto/mini-test-overall-response.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -16,6 +19,7 @@ export class LearnerMiniTestController {
   constructor(
     private readonly tagService: TagService,
     private readonly miniTestService: MiniTestService,
+    private readonly questionGroupService: QuestionGroupService,
   ) {}
 
   @Get()
@@ -49,5 +53,12 @@ export class LearnerMiniTestController {
   @Get('tags')
   async getTagsByPartId(@Query('partId') partId: number): Promise<TagByPartResponse[]> {
     return this.tagService.getTagsByPartId(partId);
+  }
+
+  @Post()
+  async submitTest(
+    @Body() miniTestRequest: MiniTestRequest,
+  ): Promise<MiniTestOverallResponse> {
+    return this.questionGroupService.getMiniTestOverallResponse(miniTestRequest);
   }
 }

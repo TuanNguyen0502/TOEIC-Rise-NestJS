@@ -64,4 +64,19 @@ export class QuestionGroupMapper {
       })),
     };
   }
+
+  /**
+   * Maps QuestionGroup entity to MiniTestQuestionGroupAnswerResponse
+   * Used in mini-test submission to show answer details grouped by question group
+   */
+  toMiniTestQuestionGroupAnswerResponse(qg: QuestionGroup): any {
+    return {
+      id: qg.id,
+      position: qg.position,
+      audioUrl: qg.audioUrl,
+      imageUrl: qg.imageUrl,
+      passage: qg.passage,
+      questions: [],
+    };
+  }
 }
