@@ -439,6 +439,7 @@ export class AnalysisService implements IAnalysisService {
 
     for (const [partName, tagStatsMap] of rawData.entries()) {
       const responses: UserAnswerGroupedByTagResponse[] = [];
+      let totalEntry: UserAnswerGroupedByTagResponse | null = null;
 
       for (const [tagName, stats] of tagStatsMap.entries()) {
         const total = stats.correct + stats.wrong;
@@ -458,13 +459,18 @@ export class AnalysisService implements IAnalysisService {
         const partTotal = partStat.correct + partStat.wrong;
         const partCorrectPercent =
           partTotal === 0 ? 0 : (partStat.correct / partTotal) * 100;
-
-        responses.push({
+        totalEntry = {
           tag: 'Total',
           correctAnswers: partStat.correct,
           wrongAnswers: partStat.wrong,
           correctPercent: partCorrectPercent,
-        });
+        };
+      }
+
+      // Sort tags by ascending correctPercent and append Total at the end
+      responses.sort((a, b) => a.correctPercent - b.correctPercent);
+      if (totalEntry) {
+        responses.push(totalEntry);
       }
 
       userAnswersByPart[partName] = responses;

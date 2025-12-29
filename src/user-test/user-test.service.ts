@@ -352,6 +352,7 @@ export class UserTestService {
       );
 
       const groupedResponses: UserAnswerGroupedByTagResponseDto[] = [];
+      let totalEntry: UserAnswerGroupedByTagResponseDto | null = null;
 
       for (const [tagName, answersForTag] of answersByTag.entries()) {
         const correctAnswers = answersForTag.filter(
@@ -384,13 +385,19 @@ export class UserTestService {
       const totalPercent =
         totalQuestions === 0 ? 0 : (totalCorrect / totalQuestions) * 100;
 
-      groupedResponses.push({
+      totalEntry = {
         tag: 'Total',
         correctAnswers: totalCorrect,
         wrongAnswers: totalWrong,
         correctPercent: totalPercent,
         userAnswerOverallResponses: null,
-      });
+      };
+
+      // Sort tags by ascending correctPercent and append Total at the end
+      groupedResponses.sort((a, b) => a.correctPercent - b.correctPercent);
+      if (totalEntry) {
+        groupedResponses.push(totalEntry);
+      }
 
       userAnswersByPart[partName] = groupedResponses;
     }
