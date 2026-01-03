@@ -416,7 +416,7 @@ export class AuthService {
     return 'Verification code sent';
   }
 
-  async verifyOtp(verifyDto: VerifyOtpDto): Promise<{ resetToken: string }> {
+  async verifyOtp(verifyDto: VerifyOtpDto): Promise<String> {
     const { email, otp } = verifyDto;
     const account = await this.userService.findOneByEmail(email);
 
@@ -458,7 +458,7 @@ export class AuthService {
 
     // Generate special token for password reset
     const resetToken = await this._generatePasswordResetToken(account);
-    return { resetToken };
+    return resetToken;
   }
 
   async resetPassword(
@@ -475,7 +475,8 @@ export class AuthService {
       payload = await this.jwtService.verifyAsync(token, {
         secret: this.configService.get<string>('JWT_SECRET_KEY'),
       });
-    } catch {
+    } catch (e) {
+      console.error('Token verification error:', e);
       throw new AppException(ErrorCode.TOKEN_EXPIRED);
     }
 
