@@ -107,24 +107,36 @@ export class UserTestService {
       ])
       .orderBy('ut.createdAt', 'DESC')
       .getRawMany<LearnerTestHistoryRawRow>();
-
+      
     return rows.map(
-      (row): LearnerTestHistoryResponse => ({
-        id: Number(row.id),
-        createdAt: row.createdAt
-          ? formatInTimeZone(row.createdAt, TIMEZONE_VIETNAM, DATE_TIME_PATTERN)
-          : null,
-        parts:
-          row.partNames.length === 0
-            ? null
-            : Array.isArray(row.partNames)
-              ? row.partNames
-              : String(row.partNames).split(', '),
-        correctAnswers: Number(row.correctAnswers),
-        totalQuestions: Number(row.totalQuestions),
-        totalScore: Number(row.score),
-        timeSpent: Number(row.timeSpent),
-      }),
+      (row): LearnerTestHistoryResponse => {
+        let parts: string[] | null = null;
+
+        if (row.partNames) {
+          if (Array.isArray(row.partNames)) {
+            parts = row.partNames;
+          } else if (typeof row.partNames === 'string') {
+            try {
+              const parsed: unknown = JSON.parse(row.partNames);
+              parts = Array.isArray(parsed) ? (parsed as string[]) : null;
+            } catch {
+              parts = row.partNames.split(', ').filter((p: string) => p.trim());
+            }
+          }
+        }
+
+        return {
+          id: Number(row.id),
+          createdAt: row.createdAt
+            ? formatInTimeZone(row.createdAt, TIMEZONE_VIETNAM, DATE_TIME_PATTERN)
+            : null,
+          parts,
+          correctAnswers: Number(row.correctAnswers),
+          totalQuestions: Number(row.totalQuestions),
+          totalScore: Number(row.score),
+          timeSpent: Number(row.timeSpent),
+        };
+      },
     );
   }
 
