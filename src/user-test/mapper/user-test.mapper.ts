@@ -22,7 +22,10 @@ export class UserTestMapper {
       testId: userTest.test.id,
       userTestId: userTest.id,
       testName: userTest.test.name,
-      parts: userTest.parts ?? null,
+      parts:
+        userTest.parts == null || userTest.parts.length === 0
+          ? null
+          : userTest.parts,
       totalQuestions: userTest.totalQuestions ?? 0,
       correctAnswers: userTest.correctAnswers ?? 0,
       correctPercent: Number(userTest.correctPercent ?? 0.0),

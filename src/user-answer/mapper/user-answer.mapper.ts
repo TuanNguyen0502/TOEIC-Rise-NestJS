@@ -60,7 +60,7 @@ export class UserAnswerMapper {
     return {
       userAnswerId: userAnswer.id,
       position: q.position,
-      isCorrect: q.correctOption === userAnswer.answer,
+      correct: q.correctOption === userAnswer.answer,
     };
   }
 }

@@ -1,7 +1,7 @@
 export class UserAnswerOverallResponseDto {
   userAnswerId: number;
   position: number;
-  isCorrect: boolean;
+  correct: boolean;
 }
 
 export class UserAnswerOverallResponse {

@@ -1,9 +1,9 @@
 export class LearnerTestHistoryResponse {
   id: number;
   createdAt: string | null;
-  parts: string[];
+  parts: string[] | null;
   correctAnswers: number;
   totalQuestions: number;
-  score: number;
+  totalScore: number;
   timeSpent: number;
 }

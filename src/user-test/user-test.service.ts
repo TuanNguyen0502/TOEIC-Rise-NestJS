@@ -114,12 +114,15 @@ export class UserTestService {
         createdAt: row.createdAt
           ? formatInTimeZone(row.createdAt, TIMEZONE_VIETNAM, DATE_TIME_PATTERN)
           : null,
-        parts: Array.isArray(row.partNames)
-          ? row.partNames
-          : String(row.partNames).split(', '),
+        parts:
+          row.partNames.length === 0
+            ? null
+            : Array.isArray(row.partNames)
+              ? row.partNames
+              : String(row.partNames).split(', '),
         correctAnswers: Number(row.correctAnswers),
         totalQuestions: Number(row.totalQuestions),
-        score: Number(row.score),
+        totalScore: Number(row.score),
         timeSpent: Number(row.timeSpent),
       }),
     );
@@ -453,7 +456,6 @@ export class UserTestService {
     if (!userTest.createdAt) {
       userTest.createdAt = new Date();
     }
-
     // Save userTest first to get ID
     const savedUserTest = await this.userTestRepository.save(userTest);
 
