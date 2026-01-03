@@ -114,7 +114,7 @@ export class UserTestService {
         createdAt: row.createdAt
           ? formatInTimeZone(row.createdAt, TIMEZONE_VIETNAM, DATE_TIME_PATTERN)
           : null,
-        partNames: Array.isArray(row.partNames)
+        parts: Array.isArray(row.partNames)
           ? row.partNames
           : String(row.partNames).split(', '),
         correctAnswers: Number(row.correctAnswers),
@@ -449,6 +449,10 @@ export class UserTestService {
       parts,
       userAnswers: [],
     });
+
+    if (!userTest.createdAt) {
+      userTest.createdAt = new Date();
+    }
 
     // Save userTest first to get ID
     const savedUserTest = await this.userTestRepository.save(userTest);

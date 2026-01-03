@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseIntPipe,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { TestService } from './test.service';
 import { PageRequestDto } from './dto/page-request.dto';
 import { ApiTags } from '@nestjs/swagger';
