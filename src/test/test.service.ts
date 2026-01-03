@@ -93,7 +93,7 @@ export class TestService {
       id: test.id,
       testName: test.name,
       testSetName: test.testSet.name,
-      numberOfLearnedTests: Number(test.numberOfLearnerTests),
+      numberOfLearnerTests: Number(test.numberOfLearnerTests),
     }));
 
     // Format for PageResponse
