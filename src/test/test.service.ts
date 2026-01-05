@@ -343,6 +343,12 @@ export class TestService {
       testSet,
       numberOfLearnerTests: 0,
     });
+    if (!test.createdAt) {
+      test.createdAt = new Date();
+    }
+    if (!test.updatedAt) {
+      test.updatedAt = new Date();
+    }
     return testRepo.save(test);
   }
 

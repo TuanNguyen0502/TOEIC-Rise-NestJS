@@ -45,9 +45,16 @@ export class StaffTestController {
   @UseInterceptors(FileInterceptor('file'))
   async importTests(
     @UploadedFile() file: Express.Multer.File,
-    @Body('testRequest', new ParseAndValidateJsonPipe(TestRequestDto))
-    testRequest: TestRequestDto,
+    @Body() body: { testRequest?: string },
   ) {
+    // Parse and validate testRequest from form-data
+    // When using FileInterceptor with form-data, text fields come as strings
+    const parsePipe = new ParseAndValidateJsonPipe(TestRequestDto);
+    const testRequest = parsePipe.transform(body.testRequest, {
+      data: 'testRequest',
+      type: 'body',
+      metatype: TestRequestDto,
+    });
     await this.testService.importTest(file, testRequest);
     return { message: 'Test imported' };
   }
