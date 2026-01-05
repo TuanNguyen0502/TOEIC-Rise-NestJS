@@ -8,6 +8,7 @@ import { AdminTestSetController } from './admin-test-set.controller';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { TestSetMapper } from './mapper/test-set.mapper';
 import { AuthModule } from 'src/auth/auth.module';
+import { StaffTestSetController } from './staff-test-set.controller';
 
 @Module({
   imports: [
@@ -15,7 +16,11 @@ import { AuthModule } from 'src/auth/auth.module';
     forwardRef(() => TestModule),
     AuthModule,
   ],
-  controllers: [TestSetController, AdminTestSetController],
+  controllers: [
+    TestSetController,
+    AdminTestSetController,
+    StaffTestSetController,
+  ],
   providers: [TestSetService, RolesGuard, TestSetMapper],
   exports: [TestSetService],
 })

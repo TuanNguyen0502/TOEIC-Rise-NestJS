@@ -18,7 +18,6 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ERole } from 'src/enums/ERole.enum';
 import { CreateTestSetRequestDto } from './dto/create-test-set-request.dto';
-import { GetTestSetsAdminDto } from './dto/get-test-sets-admin.dto';
 import { GetTestSetDetailQueryDto } from './dto/get-test-set-detail-query.dto';
 
 @ApiTags('admin/test-sets')
@@ -28,11 +27,6 @@ import { GetTestSetDetailQueryDto } from './dto/get-test-set-detail-query.dto';
 @Roles(ERole.ADMIN)
 export class AdminTestSetController {
   constructor(private readonly testSetService: TestSetService) {}
-
-  @Get()
-  async getAllTestSets(@Query() query: GetTestSetsAdminDto) {
-    return this.testSetService.getAllTestSetsAdmin(query);
-  }
 
   @Get(':id')
   async getTestSetDetailById(
