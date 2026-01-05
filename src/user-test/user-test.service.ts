@@ -83,7 +83,7 @@ export class UserTestService {
     private readonly questionMapper: QuestionMapper,
     private readonly userAnswerMapper: UserAnswerMapper,
     private readonly userTestMapper: UserTestMapper,
-  ) {}
+  ) { }
 
   async allLearnerTestHistories(
     testId: number,
@@ -107,7 +107,7 @@ export class UserTestService {
       ])
       .orderBy('ut.createdAt', 'DESC')
       .getRawMany<LearnerTestHistoryRawRow>();
-      
+
     return rows.map(
       (row): LearnerTestHistoryResponse => {
         let parts: string[] | null = null;
@@ -123,6 +123,9 @@ export class UserTestService {
               parts = row.partNames.split(', ').filter((p: string) => p.trim());
             }
           }
+        }
+        if (!parts || parts.length === 0) {
+          parts = null;
         }
 
         return {
