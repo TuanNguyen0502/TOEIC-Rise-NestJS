@@ -103,6 +103,12 @@ export class TestSetService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    if (!testSet.createdAt) {
+      testSet.createdAt = new Date();
+    }
+    if (!testSet.updatedAt) {
+      testSet.updatedAt = new Date();
+    }
 
     await this.testSetRepository.save(testSet);
   }
