@@ -100,6 +100,8 @@ export class TestSetService {
     const testSet = this.testSetRepository.create({
       name: createTestSetRequest.testName,
       status: ETestSetStatus.IN_USE,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
     await this.testSetRepository.save(testSet);
