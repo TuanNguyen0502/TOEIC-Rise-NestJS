@@ -101,6 +101,12 @@ export class TestSetService {
       name: createTestSetRequest.testName,
       status: ETestSetStatus.IN_USE,
     });
+    if (!testSet.createdAt) {
+      testSet.createdAt = new Date();
+    }
+    if (!testSet.updatedAt) {
+      testSet.updatedAt = new Date();
+    }
 
     await this.testSetRepository.save(testSet);
   }
